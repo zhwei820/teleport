@@ -28,38 +28,23 @@ import (
 )
 
 type (
-	// Protocol socket communication protocol
-	Protocol interface {
-		// WritePacket writes header and body to the connection.
-		WritePacket(
-			packet *Packet,
-			destWriter *utils.BufioWriter,
-			codecWriterMaker func(codecName string, w io.Writer) (*CodecWriter, error),
-			isActiveClosed func() bool,
-		) error
-
-		// ReadPacket reads header and body from the connection.
-		ReadPacket(
-			packet *Packet,
-			bodyAdapter func() interface{},
-			srcReader *utils.BufioReader,
-			codecReaderMaker func(codecId byte) (*CodecReader, error),
-			isActiveClosed func() bool,
-			checkReadLimit func(int64) error,
-		) error
+	// Proto pack/unpack protocol scheme of socket packet.
+	Proto interface {
+		Version() (byte, string)
+		Pack(io.Writer, *Packet) error
+		Unpack(*Packet, io.Reader) error
 	}
-	// ProtocolFunc is builder of socket communication protocol
-	ProtocolFunc func() Protocol
+	ProtoFunc func() Proto
 )
 
-// DefaultProtocolFunc gets the default builder of socket communication protocol
-func DefaultProtocolFunc() ProtocolFunc {
-	return defaultProtocolFunc
+// DefaultProtoFunc gets the default builder of socket communication protocol
+func DefaultProtoFunc() ProtoFunc {
+	return defaultProtoFunc
 }
 
-// SetDefaultProtocolFunc sets the default builder of socket communication protocol
-func SetDefaultProtocolFunc(protocolFunc ProtocolFunc) {
-	defaultProtocolFunc = protocolFunc
+// SetDefaultProtoFunc sets the default builder of socket communication protocol
+func SetDefaultProtoFunc(protocolFunc ProtoFunc) {
+	defaultProtoFunc = protocolFunc
 }
 
 /*
@@ -81,8 +66,8 @@ func SetDefaultProtocolFunc(protocolFunc ProtocolFunc) {
 
 // default builder of socket communication protocol
 var (
-	defaultProtocolFunc = func() Protocol { return &ProtoLee{tmpBufferWriter: bytes.NewBuffer(nil)} }
-	lengthSize          = int64(binary.Size(uint32(0)))
+	defaultProtoFunc = func() Proto { return &ProtoLee{tmpBufferWriter: bytes.NewBuffer(nil)} }
+	lengthSize       = int64(binary.Size(uint32(0)))
 )
 
 type ProtoLee struct {

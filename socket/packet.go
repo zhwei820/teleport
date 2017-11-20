@@ -24,34 +24,66 @@ import (
 	"errors"
 	"io"
 	"math"
+	"net/http"
 	"sync"
 
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/teleport/codec"
 )
 
-// Packet provides header and body's containers for receiving and sending packet.
-type Packet struct {
-	// HeaderCodec header codec name
-	HeaderCodec string `json:"header_codec"`
-	// BodyCodec body codec name
-	BodyCodec string `json:"body_codec"`
-	// header content
-	Header *Header `json:"header"`
-	// body content
-	Body interface{} `json:"body"`
-	// header length
-	HeaderLength int64 `json:"header_length"`
-	// body length
-	BodyLength int64 `json:"body_length"`
-	// packet size
-	Size int64 `json:"size"`
-	// get body by header
-	// Note:
-	//  only for writing packet;
-	//  should be nil when reading packet.
-	bodyGetting func(*Header) interface{} `json:"-"`
-	next        *Packet                   `json:"-"`
+type (
+	// Packet a socket data packet.
+	Packet struct {
+		// header object
+		Header *Header
+		// body content
+		headerBytes []byte
+		// header length
+		HeaderLength int64
+		// body codec type
+		BodyType byte
+		// body object
+		Body interface{}
+		// body content
+		bodyBytes []byte
+		// body length
+		BodyLength int64
+		// NewBody creates a new body by header
+		// Note:
+		//  only for writing packet;
+		//  should be nil when reading packet.
+		NewBody func(*Header) interface{}
+		// One byte one transfer encoding.
+		// Contains transfer encodings from outer-most to inner-most.
+		TransferEncoding []byte
+		next             *Packet
+	}
+	// Header header content of socket data packet.
+	Header struct {
+		Type byte
+		URI  string
+		Code int32
+		Meta http.Header
+	}
+	// PackHandler handle byte stream of packet when pack/unpack.
+	PackHandler interface {
+		Id() byte
+		OnPack(*bytes.Buffer) error
+		OnUnpack(*bytes.Buffer) error
+	}
+)
+
+func (p *Packet) EncodeBody(w io.Writer) error {
+
+}
+func (p *Packet) DecodeBody(bodyBytes []byte) error {
+	if p.bodyFinder == nil {
+		p.Body = nil
+		return nil
+	}
+	p.Body = p.bodyFinder(p.Header)
+	p.Header.ContentType()
+	return
 }
 
 var packetStack = new(struct {
@@ -150,15 +182,6 @@ func (p *Packet) Reset(bodyGetting func(*Header) interface{}, settings ...Packet
 // ResetBodyGetting resets the function of geting body.
 func (p *Packet) ResetBodyGetting(bodyGetting func(*Header) interface{}) {
 	p.bodyGetting = bodyGetting
-}
-
-func (p *Packet) bodyAdapter() interface{} {
-	if p.bodyGetting != nil {
-		p.Body = p.bodyGetting(p.Header)
-	} else {
-		p.Body = nil
-	}
-	return p.Body
 }
 
 // String returns printing text.
