@@ -29,6 +29,7 @@ import (
 
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/teleport/codec"
+	"github.com/henrylee2cn/teleport/utils"
 )
 
 type (
@@ -48,42 +49,62 @@ type (
 		bodyBytes []byte
 		// body length
 		BodyLength int64
-		// NewBody creates a new body by header
+		// NewBody creates a new body by header info
 		// Note:
 		//  only for writing packet;
 		//  should be nil when reading packet.
-		NewBody func(*Header) interface{}
-		// One byte one transfer encoding.
-		// Contains transfer encodings from outer-most to inner-most.
-		TransferEncoding []byte
-		next             *Packet
+		NewBody NewBodyFunc
+		// Contains transfer handlers from outer-most to inner-most.
+		// Note: the length can not be bigger than 127!
+		XferPipe []XferFilter
+		next     *Packet
 	}
 	// Header header content of socket data packet.
 	Header struct {
-		Type byte
-		URI  string
-		Code int32
-		Meta http.Header
+		Seq  uint64     // 8
+		Type byte       // 1
+		Uri  string     // len+4
+		Code int32      // 4
+		Meta utils.Args // len+4
 	}
-	// PackHandler handle byte stream of packet when pack/unpack.
-	PackHandler interface {
+	// NewBodyFunc creates a new body by header info.
+	NewBodyFunc func(*Header) interface{}
+	// XferFilter handles byte stream of packet when transfer.
+	XferFilter interface {
 		Id() byte
-		OnPack(*bytes.Buffer) error
-		OnUnpack(*bytes.Buffer) error
+		OnPack([]byte) ([]byte, error)
+		OnUnpack([]byte) ([]byte, error)
 	}
 )
 
-func (p *Packet) EncodeBody(w io.Writer) error {
-
+// MarshalBody returns the encoding of body.
+func (p *Packet) MarshalBody() ([]byte, error) {
+	if p.Body == nil {
+		return []byte{}, nil
+	}
+	c, err := codec.GetById(p.BodyType)
+	if err != nil {
+		return err
+	}
+	return c.Marshal(p.Body)
 }
-func (p *Packet) DecodeBody(bodyBytes []byte) error {
-	if p.bodyFinder == nil {
+
+// UnmarshalBody parses the encoded data and stores the result
+// in the value pointed to by v.
+func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
+	if len(bodyBytes) == 0 {
+		return nil
+	}
+	if p.NewBody == nil {
 		p.Body = nil
 		return nil
 	}
-	p.Body = p.bodyFinder(p.Header)
-	p.Header.ContentType()
-	return
+	c, err := codec.GetById(p.BodyType)
+	if err != nil {
+		return err
+	}
+	p.Body = p.NewBody(p.Header)
+	return c.Unmarshal(bodyBytes, p.Body)
 }
 
 var packetStack = new(struct {
@@ -93,16 +114,16 @@ var packetStack = new(struct {
 
 // GetPacket gets a *Packet form packet stack.
 // Note:
-//  bodyGetting is only for reading form connection;
+//  NewBody is only for reading form connection;
 //  settings are only for writing to connection.
-func GetPacket(bodyGetting func(*Header) interface{}, settings ...PacketSetting) *Packet {
+func GetPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
 	packetStack.mu.Lock()
 	p := packetStack.freePacket
 	if p == nil {
-		p = NewPacket(bodyGetting)
+		p = NewPacket(NewBody)
 	} else {
 		packetStack.freePacket = p.next
-		p.Reset(bodyGetting, settings...)
+		p.Reset(NewBody, settings...)
 	}
 	packetStack.mu.Unlock()
 	return p
@@ -118,8 +139,8 @@ func GetSenderPacket(typ int32, uri string, body interface{}, setting ...PacketS
 }
 
 // GetReceiverPacket returns a packet for sending.
-func GetReceiverPacket(bodyGetting func(*Header) interface{}) *Packet {
-	return GetPacket(bodyGetting)
+func GetReceiverPacket(NewBody NewBodyFunc) *Packet {
+	return GetPacket(NewBody)
 }
 
 // PutPacket puts a *Packet to packet stack.
@@ -133,12 +154,12 @@ func PutPacket(p *Packet) {
 
 // NewPacket creates a new *Packet.
 // Note:
-//  bodyGetting is only for reading form connection;
+//  NewBody is only for reading form connection;
 //  settings are only for writing to connection.
-func NewPacket(bodyGetting func(*Header) interface{}, settings ...PacketSetting) *Packet {
+func NewPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
 	var p = &Packet{
-		Header:      new(Header),
-		bodyGetting: bodyGetting,
+		Header:  new(Header),
+		NewBody: NewBody,
 	}
 	for _, f := range settings {
 		f(p)
@@ -156,32 +177,32 @@ func NewSenderPacket(typ int32, uri string, body interface{}, setting ...PacketS
 }
 
 // NewReceiverPacket returns a packet for sending.
-func NewReceiverPacket(bodyGetting func(*Header) interface{}) *Packet {
-	return NewPacket(bodyGetting)
+func NewReceiverPacket(NewBody NewBodyFunc) *Packet {
+	return NewPacket(NewBody)
 }
 
 // Reset resets itself.
 // Note:
-//  bodyGetting is only for reading form connection;
+//  NewBody is only for reading form connection;
 //  settings are only for writing to connection.
-func (p *Packet) Reset(bodyGetting func(*Header) interface{}, settings ...PacketSetting) {
+func (p *Packet) Reset(newBodyFunc NewBodyFunc, settings ...PacketSetting) {
 	p.next = nil
-	p.bodyGetting = bodyGetting
+	p.NewBody = newBodyFunc
 	p.Header.Reset()
 	p.Body = nil
 	p.HeaderLength = 0
 	p.BodyLength = 0
 	p.Size = 0
 	p.HeaderCodec = ""
-	p.BodyCodec = ""
+	p.BodyType = ""
 	for _, f := range settings {
 		f(p)
 	}
 }
 
-// ResetBodyGetting resets the function of geting body.
-func (p *Packet) ResetBodyGetting(bodyGetting func(*Header) interface{}) {
-	p.bodyGetting = bodyGetting
+// SetNewBody resets the function of geting body.
+func (p *Packet) SetNewBody(newBodyFunc NewBodyFunc) {
+	p.NewBody = newBodyFunc
 }
 
 // String returns printing text.
@@ -190,18 +211,9 @@ func (p *Packet) String() string {
 	return goutil.BytesToString(b)
 }
 
-// HeaderCodecId returns packet header codec id.
-func (p *Packet) HeaderCodecId() byte {
-	c, err := codec.GetByName(p.HeaderCodec)
-	if err != nil {
-		return codec.NilCodecId
-	}
-	return c.Id()
-}
-
-// BodyCodecId returns packet body codec id.
-func (p *Packet) BodyCodecId() byte {
-	c, err := codec.GetByName(p.BodyCodec)
+// BodyType returns packet body codec id.
+func (p *Packet) BodyType() byte {
+	c, err := codec.GetByName(p.BodyType)
 	if err != nil {
 		return codec.NilCodecId
 	}
@@ -226,17 +238,10 @@ func WithStatus(code int32, text string) PacketSetting {
 	}
 }
 
-// WithBodyCodec sets body codec name.
-func WithBodyCodec(codecName string) PacketSetting {
+// WithBodyType sets body codec name.
+func WithBodyType(codecName string) PacketSetting {
 	return func(p *Packet) {
-		p.BodyCodec = codecName
-	}
-}
-
-// WithBodyGzip sets body gzip level.
-func WithBodyGzip(gzipLevel int32) PacketSetting {
-	return func(p *Packet) {
-		p.Header.Gzip = gzipLevel
+		p.BodyType = codecName
 	}
 }
 
@@ -314,58 +319,28 @@ func Unmarshal(b []byte, v interface{}, isGzip bool) (codecName string, err erro
 }
 
 var (
-	defaultHeaderCodec codec.Codec
-	defaultBodyCodec   codec.Codec
+	defaultBodyType codec.Codec
 )
 
 func init() {
-	SetDefaultHeaderCodec("json")
-	SetDefaultBodyCodec("json")
+	SetDefaultBodyType("json")
 }
 
-// GetDefaultHeaderCodec gets the header default codec.
-func GetDefaultHeaderCodec() codec.Codec {
-	return defaultHeaderCodec
+// GetDefaultBodyType gets the body default codec.
+func GetDefaultBodyType() codec.Codec {
+	return defaultBodyType
 }
 
-// GetDefaultBodyCodec gets the body default codec.
-func GetDefaultBodyCodec() codec.Codec {
-	return defaultBodyCodec
-}
-
-// SetDefaultHeaderCodec set the default header codec.
+// SetDefaultBodyType set the default header codec.
 // Note:
 //  If the codec.Codec named 'codecName' is not registered, it will panic;
 //  It is not safe to call it concurrently.
-func SetDefaultHeaderCodec(codecName string) {
+func SetDefaultBodyType(codecName string) {
 	c, err := codec.GetByName(codecName)
 	if err != nil {
 		panic(err)
 	}
-	defaultHeaderCodec = c
-}
-
-// SetDefaultBodyCodec set the default header codec.
-// Note:
-//  If the codec.Codec named 'codecName' is not registered, it will panic;
-//  It is not safe to call it concurrently.
-func SetDefaultBodyCodec(codecName string) {
-	c, err := codec.GetByName(codecName)
-	if err != nil {
-		panic(err)
-	}
-	defaultBodyCodec = c
-}
-
-// AddCodecToBytes adds codec id to body bytes.
-func AddCodecToBytes(codecId byte, body []byte) []byte {
-	if len(body) == 0 {
-		return body
-	}
-	buf := make([]byte, len(body)+1)
-	buf[0] = codecId
-	copy(buf[1:], body)
-	return buf
+	defaultBodyType = c
 }
 
 var (

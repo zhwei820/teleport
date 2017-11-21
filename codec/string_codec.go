@@ -16,8 +16,6 @@ package codec
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
 
 	"github.com/henrylee2cn/goutil"
 )
@@ -30,27 +28,17 @@ func init() {
 type StringCodec struct{}
 
 // Name returns codec name
-func (p *StringCodec) Name() string {
+func (StringCodec) Name() string {
 	return "string"
 }
 
 // Id returns codec id
-func (p *StringCodec) Id() byte {
+func (StringCodec) Id() byte {
 	return 's'
 }
 
-// StringEncoder string decoder
-type StringEncoder struct {
-	writer io.Writer
-}
-
-// NewEncoder returns a new string encoder that writes to writer.
-func (*StringCodec) NewEncoder(writer io.Writer) Encoder {
-	return &StringEncoder{writer}
-}
-
-// Encode writes the string encoding of v to the writer.
-func (p *StringEncoder) Encode(v interface{}) error {
+// Marshal returns the string encoding of v.
+func (StringCodec) Marshal(v interface{}) ([]byte, error) {
 	var b []byte
 	switch s := v.(type) {
 	case nil:
@@ -63,40 +51,23 @@ func (p *StringEncoder) Encode(v interface{}) error {
 	case *[]byte:
 		b = *s
 	default:
-		return fmt.Errorf("%T can not be directly converted to []byte type", v)
+		return nil, fmt.Errorf("%T can not be directly converted to []byte type", v)
 	}
-	_, err := p.writer.Write(b)
-	return err
+	return b, nil
 }
 
-// StringDecoder string decoder
-type StringDecoder struct {
-	limitReader io.Reader
-}
-
-// NewDecoder returns a new string decoder that reads from limit reader.
-func (*StringCodec) NewDecoder(limitReader io.Reader) Decoder {
-	return &StringDecoder{
-		limitReader: limitReader,
-	}
-}
-
-// Decode reads the next string-encoded value from its
-// input and stores it in the value pointed to by v.
-func (p *StringDecoder) Decode(v interface{}) error {
-	b, err := ioutil.ReadAll(p.limitReader)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return err
-	}
+// Unmarshal parses the string-encoded data and stores the result
+// in the value pointed to by v.
+func (StringCodec) Unmarshal(data []byte, v interface{}) error {
 	switch s := v.(type) {
 	case nil:
 		return nil
 	case *string:
-		*s = goutil.BytesToString(b)
+		*s = goutil.BytesToString(data)
 	case []byte:
-		copy(s, b)
+		copy(s, data)
 	case *[]byte:
-		*s = b
+		*s = data
 	default:
 		return fmt.Errorf("[]byte can not be directly converted to %T type", v)
 	}

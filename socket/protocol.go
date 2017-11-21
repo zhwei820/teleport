@@ -22,7 +22,10 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
+	"math"
+	"sync"
 
+	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/utils"
 )
@@ -30,8 +33,11 @@ import (
 type (
 	// Proto pack/unpack protocol scheme of socket packet.
 	Proto interface {
+		// Version returns the protocol's id and name.
 		Version() (byte, string)
+		// Pack pack socket data packet.
 		Pack(io.Writer, *Packet) error
+		// Unpack unpack socket data packet.
 		Unpack(*Packet, io.Reader) error
 	}
 	ProtoFunc func() Proto
@@ -66,12 +72,107 @@ func SetDefaultProtoFunc(protocolFunc ProtoFunc) {
 
 // default builder of socket communication protocol
 var (
-	defaultProtoFunc = func() Proto { return &ProtoLee{tmpBufferWriter: bytes.NewBuffer(nil)} }
+	defaultProtoFunc = func() Proto { return &FastProto{tmpBufferWriter: bytes.NewBuffer(nil)} }
 	lengthSize       = int64(binary.Size(uint32(0)))
 )
 
-type ProtoLee struct {
-	tmpBufferWriter *bytes.Buffer
+type (
+	// FastProto fast socket communication protocol.
+	FastProto struct {
+		tmpBufferWriter *bytes.Buffer
+	}
+)
+
+// Version returns the protocol's id and name.
+func (f *FastProto) Version() (byte, string) {
+	return 'f', "fast"
+}
+
+var (
+	ErrXferPipeTooLong = errors.New("the length of transfer pipe cannot be bigger than 127")
+)
+
+// Pack pack socket data packet.
+func (f *FastProto) Pack(w io.Writer, p *Packet) error {
+	bb1 := utils.AcquireByteBuffer()
+	defer utils.ReleaseByteBuffer(bb1)
+
+	// protocol version
+	bb1.WriteByte('f')
+
+	// transfer pipe
+	if len(p.XferPipe) > math.MaxInt8 {
+		return ErrXferPipeTooLong
+	}
+
+	bb1.WriteByte(byte(len(p.XferPipe)))
+	for _, pipe := range p.XferPipe {
+		bb1.WriteByte(pipe.Id())
+	}
+
+	bb2 := utils.AcquireByteBuffer()
+	defer utils.ReleaseByteBuffer(bb2)
+
+	// header
+	err := f.writeHeader(bb2, p)
+	if err != nil {
+		return err
+	}
+
+	// body
+	err = f.writeBody(bb2, p)
+	if err != nil {
+		return err
+	}
+
+	// do transfer pipe
+	for _, pipe := range p.XferPipe {
+		if bb2.B, err = pipe.OnPack(bb2.B); err != nil {
+			return err
+		}
+	}
+
+	// real write
+	err = binary.Write(w, binary.BigEndian, uint32(bb1.Len()+bb2.Len()))
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(bb1.Bytes())
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(bb2.Bytes())
+	return err
+}
+
+func (f *FastProto) writeHeader(bb *utils.ByteBuffer, p *Packet) error {
+	binary.Write(bb, binary.BigEndian, p.Header.Seq)
+
+	bb.WriteByte(p.Header.Type)
+
+	uriBytes := goutil.StringToBytes(p.Header.Uri)
+	binary.Write(bb, binary.BigEndian, uint32(len(uriBytes)))
+	bb.Write(uriBytes)
+
+	binary.Write(bb, binary.BigEndian, p.Header.Code)
+
+	metaBytes := p.Header.Meta.QueryString()
+	binary.Write(bb, binary.BigEndian, uint32(len(metaBytes)))
+}
+
+func (f *FastProto) writeBody(bb *utils.ByteBuffer, p *Packet) error {
+	bodyBytes, err := p.MarshalBody()
+	if err != nil {
+		return err
+	}
+	binary.Write(bb, binary.BigEndian, uint32(len(bodyBytes)))
+	bb.Write(bodyBytes)
+	return nil
+}
+
+// Unpack unpack socket data packet.
+func (f *FastProto) Unpack(p *Packet, r io.Reader) error {
+
 }
 
 // WritePacket writes header and body to the connection.
@@ -80,7 +181,7 @@ type ProtoLee struct {
 // Note:
 //  For the byte stream type of body, write directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
-func (p *ProtoLee) WritePacket(
+func (p *FastProto) WritePacket(
 	packet *Packet,
 	destWriter *utils.BufioWriter,
 	codecWriterMaker func(codecName string, w io.Writer) (*CodecWriter, error),
@@ -128,7 +229,7 @@ func (p *ProtoLee) WritePacket(
 	return err
 }
 
-func (p *ProtoLee) writeHeader(destWriter *utils.BufioWriter, codecWriter *CodecWriter, header *Header) error {
+func (p *FastProto) writeHeader(destWriter *utils.BufioWriter, codecWriter *CodecWriter, header *Header) error {
 	err := p.tmpBufferWriter.WriteByte(codecWriter.Id())
 	if err != nil {
 		return err
@@ -146,7 +247,7 @@ func (p *ProtoLee) writeHeader(destWriter *utils.BufioWriter, codecWriter *Codec
 	return err
 }
 
-func (ProtoLee) writeBytesBody(destWriter *utils.BufioWriter, body []byte) error {
+func (FastProto) writeBytesBody(destWriter *utils.BufioWriter, body []byte) error {
 	bodyLength := uint32(len(body))
 	err := binary.Write(destWriter, binary.BigEndian, bodyLength)
 	if err != nil {
@@ -156,7 +257,7 @@ func (ProtoLee) writeBytesBody(destWriter *utils.BufioWriter, body []byte) error
 	return err
 }
 
-func (p *ProtoLee) writeBody(destWriter *utils.BufioWriter, codecWriter *CodecWriter, gzipLevel int, body interface{}) error {
+func (p *FastProto) writeBody(destWriter *utils.BufioWriter, codecWriter *CodecWriter, gzipLevel int, body interface{}) error {
 	err := p.tmpBufferWriter.WriteByte(codecWriter.Id())
 	if err != nil {
 		return err
@@ -179,7 +280,7 @@ func (p *ProtoLee) writeBody(destWriter *utils.BufioWriter, codecWriter *CodecWr
 // Note:
 //  For the byte stream type of body, read directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
-func (p ProtoLee) ReadPacket(
+func (p FastProto) ReadPacket(
 	packet *Packet,
 	bodyAdapter func() interface{},
 	srcReader *utils.BufioReader,
@@ -231,7 +332,7 @@ func (p ProtoLee) ReadPacket(
 // readHeader can be made to time out and return an Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
 // Note: must use only one goroutine call.
-func (ProtoLee) readHeader(
+func (FastProto) readHeader(
 	srcReader *utils.BufioReader,
 	codecReaderMaker func(byte) (*CodecReader, error),
 	header *Header,
@@ -272,7 +373,7 @@ func (ProtoLee) readHeader(
 // readBody can be made to time out and return an Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
 // Note: must use only one goroutine call, and it must be called after calling the readHeader().
-func (ProtoLee) readBody(
+func (FastProto) readBody(
 	srcReader *utils.BufioReader,
 	codecReaderMaker func(byte) (*CodecReader, error),
 	gzipLevel int,
