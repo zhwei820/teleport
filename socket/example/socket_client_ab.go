@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
-
 	"github.com/henrylee2cn/teleport/socket/example/pb"
 )
 
@@ -42,11 +42,9 @@ func main() {
 				}()
 				// write request
 				packet.Reset(nil)
-				packet.HeaderCodec = "protobuf"
-				packet.BodyCodec = "protobuf"
+				packet.BodyType = codec.ID_PROTOBUF
 				packet.Header.Seq = a
 				packet.Header.Uri = "/a/b"
-				packet.Header.Gzip = 0
 				packet.Body = &pb.PbTest{A: 10, B: 2}
 				err = s.WritePacket(packet)
 				if err != nil {

@@ -23,8 +23,6 @@ type (
 	Codec interface {
 		// Id returns codec id.
 		Id() byte
-		// Name returns codec name.
-		Name() string
 		// Marshal returns the encoding of v.
 		Marshal(v interface{}) ([]byte, error)
 		// Unmarshal parses the encoded data and stores the result
@@ -34,11 +32,9 @@ type (
 )
 
 var codecMap = struct {
-	nameMap map[string]Codec
-	idMap   map[byte]Codec
+	idMap map[byte]Codec
 }{
-	nameMap: make(map[string]Codec),
-	idMap:   make(map[byte]Codec),
+	idMap: make(map[byte]Codec),
 }
 
 const (
@@ -47,30 +43,17 @@ const (
 
 // Reg registers Codec
 func Reg(codec Codec) {
-	if _, ok := codecMap.nameMap[codec.Name()]; ok {
-		panic("multi-register codec name: " + codec.Name())
-	}
 	if codec.Id() == NilCodecId {
 		panic(fmt.Sprintf("codec id can not be %d", NilCodecId))
 	}
 	if _, ok := codecMap.idMap[codec.Id()]; ok {
 		panic(fmt.Sprintf("multi-register codec id: %d", codec.Id()))
 	}
-	codecMap.nameMap[codec.Name()] = codec
 	codecMap.idMap[codec.Id()] = codec
 }
 
-// GetByName returns Codec
-func GetByName(name string) (Codec, error) {
-	codec, ok := codecMap.nameMap[name]
-	if !ok {
-		return nil, fmt.Errorf("unsupported codec name: %s", name)
-	}
-	return codec, nil
-}
-
-// GetById returns Codec
-func GetById(id byte) (Codec, error) {
+// Get returns Codec
+func Get(id byte) (Codec, error) {
 	codec, ok := codecMap.idMap[id]
 	if !ok {
 		return nil, fmt.Errorf("unsupported codec id: %d", id)

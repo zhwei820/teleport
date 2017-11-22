@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	socket.SetReadLimit(512)
+	socket.SetPacketSizeLimit(512)
 	lis, err := net.Listen("tcp", "0.0.0.0:8000")
 	if err != nil {
 		log.Fatalf("[SVR] listen err: %v", err)
@@ -39,8 +39,7 @@ func main() {
 				}
 
 				// write response
-				packet.Header.StatusCode = 200
-				packet.Header.Status = "ok"
+				packet.Header.Code = 200
 
 				pbTest.A = pbTest.A + pbTest.B
 				pbTest.B = pbTest.A - pbTest.B*2

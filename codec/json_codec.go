@@ -18,6 +18,9 @@ import (
 	"encoding/json"
 )
 
+// ID_JSON json codec id
+const ID_JSON = 'j'
+
 func init() {
 	Reg(new(JsonCodec))
 }
@@ -25,15 +28,9 @@ func init() {
 // JsonCodec json codec
 type JsonCodec struct{}
 
-// Name returns codec name
-func (JsonCodec) Name() string {
-	return "json"
-}
-
-//
 // Id returns codec id
 func (JsonCodec) Id() byte {
-	return 'j'
+	return ID_JSON
 }
 
 // Marshal returns the JSON encoding of v.

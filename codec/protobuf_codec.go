@@ -20,6 +20,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// ID_PROTOBUF protobuf codec id
+const ID_PROTOBUF = 'p'
+
 func init() {
 	Reg(new(ProtoCodec))
 }
@@ -27,14 +30,9 @@ func init() {
 // ProtoCodec protobuf codec
 type ProtoCodec struct{}
 
-// Name returns codec name
-func (ProtoCodec) Name() string {
-	return "protobuf"
-}
-
 // Id returns codec id
 func (ProtoCodec) Id() byte {
-	return 'p'
+	return ID_PROTOBUF
 }
 
 // Marshal returns the Protobuf encoding of v.

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
 
 	"github.com/henrylee2cn/teleport/socket/example/pb"
@@ -22,11 +23,9 @@ func main() {
 		// write request
 		packet.Reset(nil)
 		packet.Header.Type = 0
-		packet.HeaderCodec = "protobuf"
-		packet.BodyCodec = "protobuf"
+		packet.BodyType = codec.ID_JSON
 		packet.Header.Seq = i
 		packet.Header.Uri = "/a/b"
-		packet.Header.Gzip = 5
 		packet.Body = &pb.PbTest{A: 10, B: 2}
 		err = s.WritePacket(packet)
 		if err != nil {

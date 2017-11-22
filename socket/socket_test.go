@@ -75,7 +75,7 @@ func TestSocket(t *testing.T) {
 
 		// write request
 		packet.HeaderCodec = "json"
-		packet.BodyCodec = "json"
+		packet.BodyType = "json"
 		packet.Header.Seq = 1
 		packet.Header.Uri = "/a/b"
 		packet.Header.Gzip = 5

@@ -24,8 +24,8 @@ The contents of every one packet:
 type Packet struct {
 	// HeaderCodec header codec string
 	HeaderCodec string
-	// BodyCodec body codec string
-	BodyCodec string
+	// BodyType body codec string
+	BodyType string
 	// header content
 	Header *Header `json:"header"`
 	// body content
@@ -63,7 +63,7 @@ type Header struct {
 The default socket communication protocol:
 
 ```
-HeaderLength | HeaderCodecId | Header | BodyLength | BodyCodecId | Body
+HeaderLength | HeaderCodecId | Header | BodyLength | BodyTypeId | Body
 ```
 
 **Notes:**
@@ -72,9 +72,9 @@ HeaderLength | HeaderCodecId | Header | BodyLength | BodyCodecId | Body
 - `HeaderCodecId`: uint8, 1 byte
 - `Header`: header bytes
 - `BodyLength`: uint32, 4 bytes, big endian
-	* may be 0, meaning that the `Body` is empty and does not indicate the `BodyCodecId`
-	* may be 1, meaning that the `Body` is empty but indicates the `BodyCodecId`
-- `BodyCodecId`: uint8, 1 byte
+	* may be 0, meaning that the `Body` is empty and does not indicate the `BodyTypeId`
+	* may be 1, meaning that the `Body` is empty but indicates the `BodyTypeId`
+- `BodyTypeId`: uint8, 1 byte
 - `Body`: body bytes
 
 You can customize your own communication protocol by implementing the interface:
@@ -154,7 +154,7 @@ func main() {
 
 				// write response
 				packet.HeaderCodec = "json"
-				packet.BodyCodec = "json"
+				packet.BodyType = "json"
 				packet.Header.StatusCode = 200
 				packet.Header.Status = "ok"
 				packet.Body = time.Now()
@@ -195,7 +195,7 @@ func main() {
 		// write request
 		packet.Reset(nil)
 		packet.HeaderCodec = "json"
-		packet.BodyCodec = "json"
+		packet.BodyType = "json"
 		packet.Header.Seq = 1
 		packet.Header.Uri = "/a/b"
 		packet.Header.Gzip = 5
