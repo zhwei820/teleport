@@ -166,19 +166,19 @@ func newSocket(c net.Conn, protoFuncs []ProtoFunc) *socket {
 //  For the byte stream type of body, write directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
 func (s *socket) WritePacket(packet *Packet) (err error) {
-	s.writeMutex.Lock()
 	if packet.BodyType == codec.NilCodecId {
 		packet.BodyType = defaultBodyType.Id()
 	}
+	s.writeMutex.Lock()
 	defer func() {
+		s.writeMutex.Unlock()
 		err = s.bufioWriter.Flush()
 		if p := recover(); p != nil {
-			err = errors.Errorf("Bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
+			err = errors.Errorf("Write bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		} else if err != nil && s.isActiveClosed() {
 			err = ErrProactivelyCloseSocket
 		} else {
 		}
-		s.writeMutex.Unlock()
 	}()
 	s.bufioWriter.ResetCount()
 	return s.protocol.Pack(s.bufioWriter, packet)
@@ -193,7 +193,7 @@ func (s *socket) ReadPacket(packet *Packet) (err error) {
 	defer func() {
 		s.readMutex.Unlock()
 		if p := recover(); p != nil {
-			err = errors.Errorf("Bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
+			err = errors.Errorf("Read bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		}
 	}()
 	return s.protocol.Unpack(s.bufioReader, packet)
