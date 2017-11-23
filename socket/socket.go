@@ -17,6 +17,7 @@
 package socket
 
 import (
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -25,7 +26,6 @@ import (
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/goutil/errors"
 	"github.com/henrylee2cn/teleport/codec"
-	"github.com/henrylee2cn/teleport/utils"
 )
 
 type (
@@ -104,16 +104,13 @@ type (
 	}
 	socket struct {
 		net.Conn
-		protocol    Proto
-		id          string
-		idMutex     sync.RWMutex
-		ctxPublic   goutil.Map
-		bufioWriter *utils.BufioWriter
-		writeMutex  sync.Mutex // exclusive writer lock
-		bufioReader *utils.BufioReader
-		readMutex   sync.Mutex // exclusive read lock
-		curState    int32
-		fromPool    bool
+		protocol  Proto
+		id        string
+		idMutex   sync.RWMutex
+		ctxPublic goutil.Map
+		mu        sync.Mutex
+		curState  int32
+		fromPool  bool
 	}
 )
 
@@ -148,13 +145,9 @@ func NewSocket(c net.Conn, protoFunc ...ProtoFunc) Socket {
 }
 
 func newSocket(c net.Conn, protoFuncs []ProtoFunc) *socket {
-	bufioWriter := utils.NewBufioWriter(c)
-	bufioReader := utils.NewBufioReader(c)
 	var s = &socket{
-		protocol:    getProto(protoFuncs),
-		Conn:        c,
-		bufioWriter: bufioWriter,
-		bufioReader: bufioReader,
+		protocol: getProto(protoFuncs, c),
+		Conn:     c,
 	}
 	return s
 }
@@ -169,19 +162,14 @@ func (s *socket) WritePacket(packet *Packet) (err error) {
 	if packet.BodyType == codec.NilCodecId {
 		packet.BodyType = defaultBodyType.Id()
 	}
-	s.writeMutex.Lock()
 	defer func() {
-		s.writeMutex.Unlock()
-		err = s.bufioWriter.Flush()
 		if p := recover(); p != nil {
 			err = errors.Errorf("Write bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		} else if err != nil && s.isActiveClosed() {
 			err = ErrProactivelyCloseSocket
-		} else {
 		}
 	}()
-	s.bufioWriter.ResetCount()
-	return s.protocol.Pack(s.bufioWriter, packet)
+	return s.protocol.Pack(packet)
 }
 
 // ReadPacket reads header and body from the connection.
@@ -189,14 +177,12 @@ func (s *socket) WritePacket(packet *Packet) (err error) {
 //  For the byte stream type of body, read directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
 func (s *socket) ReadPacket(packet *Packet) (err error) {
-	s.readMutex.Lock()
 	defer func() {
-		s.readMutex.Unlock()
 		if p := recover(); p != nil {
 			err = errors.Errorf("Read bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		}
 	}()
-	return s.protocol.Unpack(s.bufioReader, packet)
+	return s.protocol.Unpack(packet)
 }
 
 // Public returns temporary public data of Socket.
@@ -239,16 +225,12 @@ func (s *socket) Reset(netConn net.Conn, protoFunc ...ProtoFunc) {
 	if s.Conn != nil {
 		s.Conn.Close()
 	}
-	s.readMutex.Lock()
-	s.writeMutex.Lock()
+	s.mu.Lock()
 	s.Conn = netConn
-	s.bufioReader.Reset(netConn)
-	s.bufioWriter.Reset(netConn)
 	s.SetId("")
-	s.protocol = getProto(protoFunc)
+	s.protocol = getProto(protoFunc, netConn)
 	atomic.StoreInt32(&s.curState, normal)
-	s.readMutex.Unlock()
-	s.writeMutex.Unlock()
+	s.mu.Unlock()
 }
 
 // Close closes the connection socket.
@@ -265,12 +247,8 @@ func (s *socket) Close() error {
 		errs = append(errs, s.Conn.Close())
 	}
 
-	s.readMutex.Lock()
-	s.writeMutex.Lock()
-	defer func() {
-		s.readMutex.Unlock()
-		s.writeMutex.Unlock()
-	}()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if s.isActiveClosed() {
 		return nil
@@ -279,8 +257,7 @@ func (s *socket) Close() error {
 	if s.fromPool {
 		s.Conn = nil
 		s.ctxPublic = nil
-		s.bufioReader.Reset(nil)
-		s.bufioWriter.Reset(nil)
+		s.protocol = nil
 		socketPool.Put(s)
 	}
 	return errors.Merge(errs...)
@@ -290,10 +267,10 @@ func (s *socket) isActiveClosed() bool {
 	return atomic.LoadInt32(&s.curState) == activeClose
 }
 
-func getProto(protoFuncs []ProtoFunc) Proto {
+func getProto(protoFuncs []ProtoFunc, rw io.ReadWriter) Proto {
 	if len(protoFuncs) > 0 {
-		return protoFuncs[0]()
+		return protoFuncs[0](rw)
 	} else {
-		return defaultProtoFunc()
+		return defaultProtoFunc(rw)
 	}
 }

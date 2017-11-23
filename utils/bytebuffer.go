@@ -115,6 +115,17 @@ func (b *ByteBuffer) Reset() {
 	b.B = b.B[:0]
 }
 
+// Reset makes ByteBuffer.B empty.
+func (b *ByteBuffer) ChangeLen(newLen int) {
+	if len(b.B) < newLen {
+		if cap(b.B) < newLen {
+			b.B = make([]byte, newLen)
+		} else {
+			b.B = b.B[:newLen]
+		}
+	}
+}
+
 const (
 	minBitSize = 6 // 2**6=64 is a CPU cache line size
 	steps      = 20
