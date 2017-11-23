@@ -150,8 +150,6 @@ func (f *FastProto) writeHeader(bb *utils.ByteBuffer, p *Packet) error {
 	binary.Write(bb, binary.BigEndian, uint32(len(uriBytes)))
 	bb.Write(uriBytes)
 
-	binary.Write(bb, binary.BigEndian, p.Header.Code)
-
 	metaBytes := p.Header.Meta.QueryString()
 	binary.Write(bb, binary.BigEndian, uint32(len(metaBytes)))
 	bb.Write(metaBytes)
@@ -246,9 +244,6 @@ func (f *FastProto) readHeader(data []byte, p *Packet) []byte {
 	data = data[4:]
 	p.Header.Uri = string(data[:uriLen])
 	data = data[uriLen:]
-	// code
-	p.Header.Code = int32(binary.BigEndian.Uint32(data))
-	data = data[4:]
 	// meta
 	metaLen := binary.BigEndian.Uint32(data)
 	data = data[4:]

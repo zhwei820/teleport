@@ -57,22 +57,10 @@ type (
 		Uri  string
 		Meta utils.Args
 	}
-	ReplyError struct {
-		Code    int32
-		Message string
-		Detail  string
-	}
 
 	// NewBodyFunc creates a new body by header info.
 	NewBodyFunc func(*Header) interface{}
 )
-
-var ReplyErrorParam = []byte("Reply-Error")
-
-func (h *Header) ErrorForReply() *ReplyError {
-	b := h.Meta.PeekBytes(ReplyErrorParam)
-if 
-}
 
 // SetSizeAndCheck sets the size of packet.
 // If the size is too big, returns error.

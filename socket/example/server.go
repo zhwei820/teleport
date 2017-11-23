@@ -39,8 +39,6 @@ func main() {
 				}
 
 				// write response
-				packet.Header.Code = 200
-
 				pbTest.A = pbTest.A + pbTest.B
 				pbTest.B = pbTest.A - pbTest.B*2
 				packet.Body = pbTest
