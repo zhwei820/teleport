@@ -21,7 +21,7 @@ import (
 )
 
 type (
-	// XferPipe transfer transfer filter pipe, handlers from outer-most to inner-most.
+	// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
 	// Note: the length can not be bigger than 255!
 	XferPipe struct {
 		filters []XferFilter

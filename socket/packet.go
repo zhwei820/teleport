@@ -44,19 +44,19 @@ type (
 		//  only for writing packet;
 		//  should be nil when reading packet.
 		NewBody NewBodyFunc `json:"-"`
-		// Contains transfer handlers from outer-most to inner-most.
-		// Note: the length can not be bigger than 127!
+		// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+		// Note: the length can not be bigger than 255!
 		XferPipe *xfer.XferPipe `json:"-"`
 		next     *Packet
 	}
 
 	// Header header content of socket data packet.
 	Header struct {
-		Seq  uint64     // 8
-		Type byte       // 1
-		Uri  string     // len+4
-		Code int32      // 4
-		Meta utils.Args // len+4
+		Seq  uint64
+		Type byte
+		Uri  string
+		Code int32
+		Meta utils.Args
 	}
 	// NewBodyFunc creates a new body by header info.
 	NewBodyFunc func(*Header) interface{}
