@@ -33,26 +33,26 @@ var GetSenderPacket = socket.GetSenderPacket
 //  func GetReceiverPacket(bodyGetting func(*socket.Header) interface{}) *socket.Packet
 var GetReceiverPacket = socket.GetReceiverPacket
 
-// DefaultProtocolFunc gets the default builder of socket communication protocol
-//  func DefaultProtocolFunc() ProtocolFunc
-var DefaultProtocolFunc = socket.DefaultProtocolFunc
+// DefaultProtoFunc gets the default builder of socket communication protocol
+//  func DefaultProtoFunc() ProtoFunc
+var DefaultProtoFunc = socket.DefaultProtoFunc
 
-// SetDefaultProtocolFunc sets the default builder of socket communication protocol
-//  func SetDefaultProtocolFunc(protocolFunc ProtocolFunc)
-var SetDefaultProtocolFunc = socket.SetDefaultProtocolFunc
+// SetDefaultProtoFunc sets the default builder of socket communication protocol
+//  func SetDefaultProtoFunc(protoFunc ProtoFunc)
+var SetDefaultProtoFunc = socket.SetDefaultProtoFunc
 
 // PutPacket puts a *socket.Packet to packet stack.
 //  func PutPacket(p *socket.Packet)
 var PutPacket = socket.PutPacket
 
 // GetReadLimit gets the packet size upper limit of reading.
-//  func GetReadLimit() int64
-var GetReadLimit = socket.GetReadLimit
+//  PacketSizeLimit() uint32
+var GetReadLimit = socket.PacketSizeLimit
 
-// GetPacketReadLimit sets max packet size.
-// If maxSize<=0, set it to max int64.
-//  func SetReadLimit(maxPacketSize int64)
-var SetReadLimit = socket.SetReadLimit
+// SetPacketSizeLimit sets max packet size.
+// If maxSize<=0, set it to max uint32.
+//  func SetPacketSizeLimit(maxPacketSize uint32)
+var SetReadLimit = socket.SetPacketSizeLimit
 
 func init() {
 	Printf("The current process PID: %d", os.Getpid())

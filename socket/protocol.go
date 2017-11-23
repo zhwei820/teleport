@@ -48,26 +48,9 @@ func DefaultProtoFunc() ProtoFunc {
 }
 
 // SetDefaultProtoFunc sets the default builder of socket communication protocol
-func SetDefaultProtoFunc(protocolFunc ProtoFunc) {
-	defaultProtoFunc = protocolFunc
+func SetDefaultProtoFunc(protoFunc ProtoFunc) {
+	defaultProtoFunc = protoFunc
 }
-
-/*
-```
-	HeaderLength | HeaderCodecId | Header | BodyLength | BodyTypeId | Body
-	```
-
-	**Notes:**
-
-	- `HeaderLength`: uint32, 4 bytes, big endian
-	- `HeaderCodecId`: uint8, 1 byte
-	- `Header`: header bytes
-	- `BodyLength`: uint32, 4 bytes, big endian
-		* may be 0, meaning that the `Body` is empty and does not indicate the `BodyTypeId`
-		* may be 1, meaning that the `Body` is empty but indicates the `BodyTypeId`
-	- `BodyTypeId`: uint8, 1 byte
-	- `Body`: body bytes
-*/
 
 type (
 	// FastProto fast socket communication protocol.
