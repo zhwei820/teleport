@@ -6,13 +6,13 @@ import (
 	"strconv"
 
 	"github.com/henrylee2cn/goutil"
-	"github.com/henrylee2cn/teleport/socket"
+	"github.com/henrylee2cn/teleport/utils"
 	"github.com/tidwall/gjson"
 )
 
 type (
-	// ReError error only for reply packet
-	ReError struct {
+	// Rerror error only for reply packet
+	Rerror struct {
 		// Code error code
 		Code int32
 		// Message error message to the user
@@ -22,12 +22,12 @@ type (
 	}
 )
 
-const ReErrorMeta = "X-Reply-Error"
+const MetaRerrorKey = "X-Reply-Error"
 
 var (
-	_ json.Marshaler   = new(ReError)
-	_ json.Unmarshaler = new(ReError)
-	_ error            = new(ReError)
+	_ json.Marshaler   = new(Rerror)
+	_ json.Unmarshaler = new(Rerror)
+	_ error            = new(Rerror)
 
 	re_a = []byte(`{"code":`)
 	re_b = []byte(`,"message":"`)
@@ -37,31 +37,37 @@ var (
 )
 
 // Error implements error interface
-func (r *ReError) Error() string {
+func (r *Rerror) Error() string {
 	b, _ := r.MarshalJSON()
 	return goutil.BytesToString(b)
 }
 
 // SetToMeta sets self to header 'X-Reply-Error' metadata.
-func (r *ReError) SetToMeta(header *socket.Header) {
+func (r *Rerror) SetToMeta(meta *utils.Args) {
 	errStr := r.Error()
 	if len(errStr) == 0 {
 		return
 	}
-	header.Meta.Set(ReErrorMeta, errStr)
+	meta.Set(MetaRerrorKey, errStr)
 }
 
-// SetFromMeta sets self from header 'X-Reply-Error' metadata.
-func (r *ReError) SetFromMeta(header *socket.Header) {
-	if r == nil {
-		return
+// NewRerrorFromMeta creates a *Rerror from header 'X-Reply-Error' metadata.
+// Return nil if there is no 'X-Reply-Error' in header metadata.
+func NewRerrorFromMeta(meta *utils.Args) *Rerror {
+	if meta == nil {
+		return nil
 	}
-	b := header.Meta.Peek(ReErrorMeta)
+	b := meta.Peek(MetaRerrorKey)
+	if len(b) == 0 {
+		return nil
+	}
+	r := new(Rerror)
 	r.UnmarshalJSON(b)
+	return r
 }
 
-// MarshalJSON marshals ReError into JSON, implements json.Marshaler interface.
-func (r *ReError) MarshalJSON() ([]byte, error) {
+// MarshalJSON marshals Rerror into JSON, implements json.Marshaler interface.
+func (r *Rerror) MarshalJSON() ([]byte, error) {
 	if r == nil {
 		return []byte{}, nil
 	}
@@ -81,7 +87,7 @@ func (r *ReError) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON unmarshals a JSON description of self.
-func (r *ReError) UnmarshalJSON(b []byte) error {
+func (r *Rerror) UnmarshalJSON(b []byte) error {
 	if r == nil {
 		return nil
 	}
