@@ -117,12 +117,10 @@ func (b *ByteBuffer) Reset() {
 
 // Reset makes ByteBuffer.B empty.
 func (b *ByteBuffer) ChangeLen(newLen int) {
-	if len(b.B) < newLen {
-		if cap(b.B) < newLen {
-			b.B = make([]byte, newLen)
-		} else {
-			b.B = b.B[:newLen]
-		}
+	if cap(b.B) < newLen {
+		b.B = make([]byte, newLen)
+	} else {
+		b.B = b.B[:newLen]
 	}
 }
 

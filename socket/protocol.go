@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/teleport/utils"
@@ -75,6 +76,7 @@ type (
 		name string
 		r    *bufio.Reader
 		w    io.Writer
+		rMu  sync.Mutex
 	}
 )
 
@@ -148,7 +150,7 @@ func (f *FastProto) Pack(p *Packet) error {
 	binary.BigEndian.PutUint32(bb.B, p.GetSize())
 
 	// real write
-	_, err = f.w.Write(bb.Bytes())
+	_, err = f.w.Write(bb.B)
 	if err != nil {
 		return err
 	}
@@ -206,6 +208,8 @@ func (f *FastProto) Unpack(p *Packet) error {
 }
 
 func (f *FastProto) readPacket(bb *utils.ByteBuffer, p *Packet) error {
+	f.rMu.Lock()
+	defer f.rMu.Unlock()
 	// size
 	var size uint32
 	err := binary.Read(f.r, binary.BigEndian, &size)

@@ -108,7 +108,7 @@ type (
 		id        string
 		idMutex   sync.RWMutex
 		ctxPublic goutil.Map
-		mu        sync.Mutex
+		mu        sync.RWMutex
 		curState  int32
 		fromPool  bool
 	}
@@ -162,7 +162,9 @@ func (s *socket) WritePacket(packet *Packet) (err error) {
 	if packet.BodyType == codec.NilCodecId {
 		packet.BodyType = defaultBodyType.Id()
 	}
+	s.mu.RLock()
 	defer func() {
+		s.mu.RUnlock()
 		if p := recover(); p != nil {
 			err = errors.Errorf("Write bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		} else if err != nil && s.isActiveClosed() {
@@ -177,7 +179,9 @@ func (s *socket) WritePacket(packet *Packet) (err error) {
 //  For the byte stream type of body, read directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
 func (s *socket) ReadPacket(packet *Packet) (err error) {
+	s.mu.RLock()
 	defer func() {
+		s.mu.RUnlock()
 		if p := recover(); p != nil {
 			err = errors.Errorf("Read bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
 		}
