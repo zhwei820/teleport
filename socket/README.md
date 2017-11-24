@@ -5,12 +5,12 @@ A concise, powerful and high-performance TCP connection socket.
 ## Feature
 
 - The server and client are peer-to-peer interfaces
-- With I/O buffer
+- Optimize I/O buffer
+- Support custom communication protocol
+- Support custom transfer filter pipe (Such as gzip, encrypt, verify...)
 - Packet contains both Header and Body
 - Supports custom encoding types, e.g `JSON` `Protobuf`
 - Header contains the status code and its description text
-- Support custom communication protocol
-- Support custom transfer filter pipe (Such as gzip, encrypt, verify...)
 - Each socket is assigned an id
 - Provides `Socket Hub`, `Socket` pool and `*Packet` stack
 - Support setting the size of the reading packet (if exceed disconnect it)
