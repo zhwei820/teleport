@@ -126,10 +126,10 @@ type (
 
 	// Header header content of socket data packet.
 	Header struct {
-		Seq  uint64
-		Type byte
-		Uri  string
-		Meta utils.Args
+		Seq  uint64     `json:"seq"`
+		Type byte       `json:"type"`
+		Uri  string     `json:"uri"`
+		Meta utils.Args `json:"-"`
 	}
 
 	// NewBodyFunc creates a new body by header info.
