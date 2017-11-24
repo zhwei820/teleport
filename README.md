@@ -38,7 +38,7 @@ go get -u github.com/henrylee2cn/teleport
 - Support set the size of socket I/O buffer
 - Packet contains both Header and Body two parts
 - Support for customizing head and body coding types separately, e.g `JSON` `Protobuf` `string`
-- Header contains the status code and its description text
+- Packet Header contains metadata in the same format as http header
 - Support push, pull, reply and other means of communication
 - Support plug-in mechanism, can customize authentication, heartbeat, micro service registration center, statistics, etc.
 - Whether server or client, the peer support reboot and shutdown gracefully
