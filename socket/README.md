@@ -8,106 +8,117 @@ A concise, powerful and high-performance TCP connection socket.
 - With I/O buffer
 - Packet contains both Header and Body
 - Supports custom encoding types, e.g `JSON` `Protobuf`
-- Header and Body can use different coding types
-- Body supports gzip compression
 - Header contains the status code and its description text
 - Support custom communication protocol
+- Support custom transfer filter pipe
 - Each socket is assigned an id
 - Provides `Socket` hub, `Socket` pool and `*Packet` stack
 - Support setting the size of the reading packet (if exceed disconnect it)
+
+## Benchmark
+
+- Test server configuration
+
+```
+darwin amd64 4CPU 8GB
+```
+
+- teleport-socket
+
+![tp_socket_benchmark](https://github.com/henrylee2cn/teleport/raw/develop/doc/tp_socket_benchmark.png)
+
+**[test code](https://github.com/henrylee2cn/rpc-benchmark/tree/master/teleport)**
+
+- rpcx
+
+![rpcx_benchmark](https://github.com/henrylee2cn/teleport/raw/develop/doc/rpcx_benchmark.jpg)
+
+**[test code](https://github.com/henrylee2cn/rpc-benchmark/tree/master/rpcx)**
+
 
 ## Packet
 
 The contents of every one packet:
 
 ```go
-type Packet struct {
-	// HeaderCodec header codec string
-	HeaderCodec string
-	// BodyType body codec string
-	BodyType string
-	// header content
-	Header *Header `json:"header"`
-	// body content
-	Body interface{} `json:"body"`
-	// header length
-	HeaderLength int64 `json:"header_length"`
-	// body length
-	BodyLength int64 `json:"body_length"`
-	// packet size
-	Size int64 `json:"size"`
-}
-```
+// socket package
+type (
+	// Packet a socket data packet.
+	Packet struct {
+		// packet size
+		Size uint32 `json:"size"`
+		// header object
+		Header *Header `json:"header"`
+		// body codec type
+		BodyType byte `json:"body_type"`
+		// body object
+		Body interface{} `json:"body"`
+		// NewBody creates a new body by header info
+		// Note:
+		//  only for writing packet;
+		//  should be nil when reading packet.
+		NewBody NewBodyFunc `json:"-"`
+		// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+		// Note: the length can not be bigger than 255!
+		XferPipe xfer.XferPipe `json:"-"`
+		next     *Packet
+	}
 
-Among the contents of the header:
+	// Header header content of socket data packet.
+	Header struct {
+		Seq  uint64
+		Type byte
+		Uri  string
+		Meta utils.Args
+	}
 
-```go
-type Header struct {
-	// Packet id
-	Id string
-	// Service type
-	Type int32
-	// Service URI
-	Uri string
-	// Body gzip level [-2,9]
-	Gzip int32
-	// As reply, it indicates the service status code
-	StatusCode int32
-	// As reply, it indicates the service status text
-	Status string
-}
+	// NewBodyFunc creates a new body by header info.
+	NewBodyFunc func(*Header) interface{}
+)
+
+// xfer package
+type (
+	// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+	// Note: the length can not be bigger than 255!
+	XferPipe struct {
+		filters []XferFilter
+	}
+	// XferFilter handles byte stream of packet when transfer.
+	XferFilter interface {
+		Id() byte
+		OnPack([]byte) ([]byte, error)
+		OnUnpack([]byte) ([]byte, error)
+	}
+)
 ```
 
 ## Protocol
 
-The default socket communication protocol:
-
-```
-HeaderLength | HeaderCodecId | Header | BodyLength | BodyTypeId | Body
-```
-
-**Notes:**
-
-- `HeaderLength`: uint32, 4 bytes, big endian
-- `HeaderCodecId`: uint8, 1 byte
-- `Header`: header bytes
-- `BodyLength`: uint32, 4 bytes, big endian
-	* may be 0, meaning that the `Body` is empty and does not indicate the `BodyTypeId`
-	* may be 1, meaning that the `Body` is empty but indicates the `BodyTypeId`
-- `BodyTypeId`: uint8, 1 byte
-- `Body`: body bytes
-
 You can customize your own communication protocol by implementing the interface:
 
 ```go
-// Protocol socket communication protocol
-type Protocol interface {
-	// WritePacket writes header and body to the connection.
-	WritePacket(
-		packet *Packet,
-		destWriter *utils.BufioWriter,
-		codecWriterMaker func(bodyType byte, w io.Writer) (*CodecWriter, error),
-		isActiveClosed func() bool,
-	) error
-
-	// ReadPacket reads header and body from the connection.
-	ReadPacket(
-		packet *Packet,
-		bodyAdapter func() interface{},
-		srcReader *utils.BufioReader,
-		codecReaderMaker func(codecId byte) (*CodecReader, error),
-		isActiveClosed func() bool,
-		checkReadLimit func(int64) error,
-	) error
-}
+type (
+	// Proto pack/unpack protocol scheme of socket packet.
+	Proto interface {
+		// Version returns the protocol's id and name.
+		Version() (byte, string)
+		// Pack pack socket data packet.
+		// Note: Make sure to write only once or there will be package contamination!
+		Pack(*Packet) error
+		// Unpack unpack socket data packet.
+		// Note: Concurrent unsafe!
+		Unpack(*Packet) error
+	}
+	ProtoFunc func(io.ReadWriter) Proto
+)
 ```
 
 Next, you can specify the communication protocol in the following ways:
 
 ```go
-func SetDefaultProtocol(Protocol)
-func GetSocket(net.Conn, ...Protocol) Socket
-func NewSocket(net.Conn, ...Protocol) Socket
+func SetDefaultProtoFunc(ProtoFunc)
+func GetSocket(net.Conn, ...ProtoFunc) Socket
+func NewSocket(net.Conn, ...ProtoFunc) Socket
 ```
 
 ## Demo
@@ -120,12 +131,13 @@ package main
 import (
 	"log"
 	"net"
-	"time"
 
 	"github.com/henrylee2cn/teleport/socket"
+	"github.com/henrylee2cn/teleport/socket/example/pb"
 )
 
 func main() {
+	// socket.SetPacketSizeLimit(512)
 	lis, err := net.Listen("tcp", "0.0.0.0:8000")
 	if err != nil {
 		log.Fatalf("[SVR] listen err: %v", err)
@@ -139,10 +151,12 @@ func main() {
 		go func(s socket.Socket) {
 			log.Printf("accept %s", s.Id())
 			defer s.Close()
+			var pbTest = new(pb.PbTest)
 			for {
 				// read request
 				var packet = socket.GetPacket(func(_ *socket.Header) interface{} {
-					return new(map[string]string)
+					*pbTest = pb.PbTest{}
+					return pbTest
 				})
 				err = s.ReadPacket(packet)
 				if err != nil {
@@ -153,16 +167,16 @@ func main() {
 				}
 
 				// write response
-				packet.HeaderCodec = "json"
-				packet.BodyType = "json"
-				packet.Header.StatusCode = 200
-				packet.Header.Status = "ok"
-				packet.Body = time.Now()
+				pbTest.A = pbTest.A + pbTest.B
+				pbTest.B = pbTest.A - pbTest.B*2
+				packet.Body = pbTest
+
 				err = s.WritePacket(packet)
 				if err != nil {
 					log.Printf("[SVR] write response err: %v", err)
+				} else {
+					log.Printf("[SVR] write response: %v", packet)
 				}
-				log.Printf("[SVR] write response: %v", packet)
 				socket.PutPacket(packet)
 			}
 		}(socket.GetSocket(conn))
@@ -179,7 +193,10 @@ import (
 	"log"
 	"net"
 
+	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
+
+	"github.com/henrylee2cn/teleport/socket/example/pb"
 )
 
 func main() {
@@ -191,15 +208,14 @@ func main() {
 	defer s.Close()
 	var packet = socket.GetPacket(nil)
 	defer socket.PutPacket(packet)
-	for i := 0; i < 10; i++ {
+	for i := uint64(0); i < 1; i++ {
 		// write request
 		packet.Reset(nil)
-		packet.HeaderCodec = "json"
-		packet.BodyType = "json"
-		packet.Header.Seq = 1
+		packet.Header.Type = 0
+		packet.BodyType = codec.ID_JSON
+		packet.Header.Seq = i
 		packet.Header.Uri = "/a/b"
-		packet.Header.Gzip = 5
-		packet.Body = map[string]string{"a": "A"}
+		packet.Body = &pb.PbTest{A: 10, B: 2}
 		err = s.WritePacket(packet)
 		if err != nil {
 			log.Printf("[CLI] write request err: %v", err)
@@ -209,7 +225,7 @@ func main() {
 
 		// read response
 		packet.Reset(func(_ *socket.Header) interface{} {
-			return new(string)
+			return new(pb.PbTest)
 		})
 		err = s.ReadPacket(packet)
 		if err != nil {
@@ -218,5 +234,6 @@ func main() {
 			log.Printf("[CLI] read response: %v", packet)
 		}
 	}
+	// select {}
 }
 ```
