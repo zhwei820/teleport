@@ -69,7 +69,7 @@ var (
 		return &FastProto{
 			id:   'f',
 			name: "fast",
-			r:    bufio.NewReaderSize(rw, 8688),
+			r:    bufio.NewReaderSize(rw, fastProtoReadBufioSize),
 			w:    rw,
 		}
 	}

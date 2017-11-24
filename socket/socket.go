@@ -322,6 +322,7 @@ var (
 // Note: Uses the default value, if bytes=1.
 func SetTCPReadBuffer(bytes int) {
 	tcpReadBuffer = bytes
+	resetFastProtoReadBufioSize()
 }
 
 // SetWriteBuffer sets the size of the operating system's
@@ -329,4 +330,20 @@ func SetTCPReadBuffer(bytes int) {
 // Note: Uses the default value, if bytes=1.
 func SetTCPWriteBuffer(bytes int) {
 	tcpWriteBuffer = bytes
+}
+
+var fastProtoReadBufioSize int
+
+func init() {
+	resetFastProtoReadBufioSize()
+}
+
+func resetFastProtoReadBufioSize() {
+	if tcpReadBuffer < 0 {
+		fastProtoReadBufioSize = 1024 * 4
+	} else if tcpReadBuffer == 0 {
+		fastProtoReadBufioSize = 1024 * 35
+	} else {
+		fastProtoReadBufioSize = tcpReadBuffer / 2
+	}
 }
