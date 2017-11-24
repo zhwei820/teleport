@@ -17,7 +17,7 @@ func main() {
 		TlsKeyFile:           "",
 		SlowCometDuration:    time.Millisecond * 500,
 		DefaultHeaderCodec:   "protobuf",
-		DefaultBodyCodec:     "json",
+		DefaultBodyType:     "json",
 		DefaultBodyGzipLevel: 5,
 		PrintBody:            true,
 		CountTime:            true,
@@ -43,8 +43,8 @@ func main() {
 			&reply,
 		)
 
-		if pullcmd.Xerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.Xerror().Error())
+		if pullcmd.*Rerror() != nil {
+			tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
 		}
 		tp.Infof("9090reply: %#v", reply)
 	}
@@ -70,8 +70,8 @@ func main() {
 			&reply,
 		)
 
-		if pullcmd.Xerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.Xerror().Error())
+		if pullcmd.*Rerror() != nil {
+			tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
 		}
 		tp.Infof("9091reply test_unknown: %#v", reply)
 	}

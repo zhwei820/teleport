@@ -20,8 +20,11 @@ import (
 	"github.com/henrylee2cn/goutil"
 )
 
-// ID_STRING protobuf codec id
-const ID_STRING = 's'
+// protobuf codec id
+const (
+	NAME_STRING = "string"
+	ID_STRING   = 's'
+)
 
 func init() {
 	Reg(new(StringCodec))
@@ -29,6 +32,11 @@ func init() {
 
 // StringCodec string codec
 type StringCodec struct{}
+
+// Name returns codec string
+func (StringCodec) Name() string {
+	return NAME_STRING
+}
 
 // Id returns codec id
 func (StringCodec) Id() byte {

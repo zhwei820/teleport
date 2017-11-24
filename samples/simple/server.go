@@ -18,7 +18,7 @@ func main() {
 		TlsKeyFile:           "",
 		SlowCometDuration:    time.Millisecond * 500,
 		DefaultHeaderCodec:   "protobuf",
-		DefaultBodyCodec:     "json",
+		DefaultBodyType:     "json",
 		DefaultBodyGzipLevel: 5,
 		PrintBody:            true,
 		CountTime:            true,
@@ -42,7 +42,7 @@ type Home struct {
 }
 
 // Test handler
-func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.Xerror) {
+func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.*Rerror) {
 	h.Session().Push("/push/test?tag=from home-test", map[string]interface{}{
 		"your_id": h.Query().Get("peer_id"),
 		"a":       1,
@@ -53,7 +53,7 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.Xe
 	}, nil
 }
 
-func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, tp.Xerror) {
+func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, tp.*Rerror) {
 	time.Sleep(1)
 	var v = struct {
 		ConnPort int
@@ -62,7 +62,7 @@ func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, tp.Xerror) {
 	}{}
 	codecName, err := ctx.Bind(&v)
 	if err != nil {
-		return nil, tp.NewXerror(1, err.Error())
+		return nil, tp.New*Rerror(1, err.Error())
 	}
 	tp.Debugf("UnknownPullHandle: codec: %s, conn_port: %d, RawMessage: %s, bytes: %s",
 		codecName, v.ConnPort, v.RawMessage, v.Bytes,

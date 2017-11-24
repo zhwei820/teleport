@@ -1,13 +1,14 @@
-package teleport
+package tp
 
 import (
 	"bytes"
 	"encoding/json"
 	"strconv"
 
-	"github.com/henrylee2cn/goutil"
-	"github.com/henrylee2cn/teleport/utils"
 	"github.com/tidwall/gjson"
+
+	"github.com/henrylee2cn/goutil"
+	"github.com/henrylee2cn/teleport/socket"
 )
 
 type (
@@ -15,9 +16,9 @@ type (
 	Rerror struct {
 		// Code error code
 		Code int32
-		// Message error message to the user
+		// Message error message to the user (optional)
 		Message string
-		// Detail error's detailed reason
+		// Detail error's detailed reason (optional)
 		Detail string
 	}
 )
@@ -36,34 +37,45 @@ var (
 	re_e = []byte(`\"`)
 )
 
-// Error implements error interface
-func (r *Rerror) Error() string {
-	b, _ := r.MarshalJSON()
-	return goutil.BytesToString(b)
-}
-
-// SetToMeta sets self to header 'X-Reply-Error' metadata.
-func (r *Rerror) SetToMeta(meta *utils.Args) {
-	errStr := r.Error()
-	if len(errStr) == 0 {
-		return
+// NewRerror creates a *Rerror.
+func NewRerror(code int32, message, detail string) *Rerror {
+	return &Rerror{
+		Code:    code,
+		Message: message,
+		Detail:  detail,
 	}
-	meta.Set(MetaRerrorKey, errStr)
 }
 
 // NewRerrorFromMeta creates a *Rerror from header 'X-Reply-Error' metadata.
 // Return nil if there is no 'X-Reply-Error' in header metadata.
-func NewRerrorFromMeta(meta *utils.Args) *Rerror {
-	if meta == nil {
-		return nil
-	}
-	b := meta.Peek(MetaRerrorKey)
+func NewRerrorFromMeta(header *socket.Header) *Rerror {
+	b := header.Meta.Peek(MetaRerrorKey)
 	if len(b) == 0 {
 		return nil
 	}
 	r := new(Rerror)
 	r.UnmarshalJSON(b)
 	return r
+}
+
+// Error implements error interface
+func (r *Rerror) Error() string {
+	b, _ := r.MarshalJSON()
+	return goutil.BytesToString(b)
+}
+
+// Copy returns the copy of Rerror
+func (r Rerror) Copy() *Rerror {
+	return &r
+}
+
+// SetToMeta sets self to header 'X-Reply-Error' metadata.
+func (r *Rerror) SetToMeta(header *socket.Header) {
+	errStr := r.Error()
+	if len(errStr) == 0 {
+		return
+	}
+	header.Meta.Set(MetaRerrorKey, errStr)
 }
 
 // MarshalJSON marshals Rerror into JSON, implements json.Marshaler interface.
@@ -96,4 +108,12 @@ func (r *Rerror) UnmarshalJSON(b []byte) error {
 	r.Message = gjson.Get(s, "message").String()
 	r.Detail = gjson.Get(s, "detail").String()
 	return nil
+}
+
+func hasRerror(header *socket.Header) bool {
+	return header.Meta.Has(MetaRerrorKey)
+}
+
+func getRerrorBytes(header *socket.Header) []byte {
+	return header.Meta.Peek(MetaRerrorKey)
 }

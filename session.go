@@ -28,6 +28,7 @@ import (
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/goutil/coarsetime"
 	"github.com/henrylee2cn/goutil/errors"
+	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
 )
 
@@ -142,12 +143,12 @@ var (
 	_ PostSession = new(session)
 )
 
-func newSession(peer *Peer, conn net.Conn, protocolFuncs []socket.ProtocolFunc) *session {
+func newSession(peer *Peer, conn net.Conn, protoFuncs []socket.ProtoFunc) *session {
 	var s = &session{
 		peer:         peer,
 		pullRouter:   peer.PullRouter,
 		pushRouter:   peer.PushRouter,
-		socket:       socket.NewSocket(conn, protocolFuncs...),
+		socket:       socket.NewSocket(conn, protoFuncs...),
 		pullCmdMap:   goutil.RwMap(),
 		readTimeout:  peer.defaultReadTimeout,
 		writeTimeout: peer.defaultWriteTimeout,
@@ -241,23 +242,14 @@ func (s *session) GoPull(uri string, args interface{}, reply interface{}, done c
 			Seq:  seq,
 			Type: TypePull,
 			Uri:  uri,
-			Gzip: s.peer.defaultBodyGzipLevel,
 		},
-		Body:        args,
-		HeaderCodec: s.peer.defaultHeaderCodec,
+		Body: args,
 	}
 	for _, f := range setting {
 		f(output)
 	}
-	if len(output.BodyCodec) == 0 {
-		switch body := args.(type) {
-		case []byte:
-			output.BodyCodec = socket.GetCodecNameFromBytes(body)
-		case *[]byte:
-			output.BodyCodec = socket.GetCodecNameFromBytes(*body)
-		default:
-			output.BodyCodec = s.peer.defaultBodyCodec
-		}
+	if output.BodyType == codec.NilCodecId {
+		output.BodyType = s.peer.defaultBodyType
 	}
 
 	cmd := &PullCmd{
@@ -295,7 +287,8 @@ func (s *session) GoPull(uri string, args interface{}, reply interface{}, done c
 			return
 		}
 	}
-	cmd.xerror = NewXerror(StatusWriteFailed, err.Error())
+	cmd.rerr = rerror_writeFailed.Copy()
+	cmd.rerr.Detail = err.Error()
 	cmd.done()
 }
 
@@ -326,24 +319,13 @@ func (s *session) Push(uri string, args interface{}, setting ...socket.PacketSet
 
 	header.Type = TypePush
 	header.Uri = uri
-	header.Gzip = s.peer.defaultBodyGzipLevel
-
 	output.Body = args
-	output.HeaderCodec = s.peer.defaultHeaderCodec
 
 	for _, f := range setting {
 		f(output)
 	}
-	if len(output.BodyCodec) == 0 {
-		switch body := args.(type) {
-		case nil:
-		case []byte:
-			output.BodyCodec = socket.GetCodecNameFromBytes(body)
-		case *[]byte:
-			output.BodyCodec = socket.GetCodecNameFromBytes(*body)
-		default:
-			output.BodyCodec = s.peer.defaultBodyCodec
-		}
+	if output.BodyType == codec.NilCodecId {
+		output.BodyType = s.peer.defaultBodyType
 	}
 
 	defer func() {
@@ -655,20 +637,20 @@ func (s *session) runlog(costTime time.Duration, input, output *socket.Packet, l
 
 		case typePullLaunch:
 			if s.peer.printBody {
-				logformat := "[pull-launch] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nSEND:\n size: %d\n body[-json]: %s\nRECV:\n size: %d\n status: %s %s\n body[-json]: %s\n"
-				printFunc(logformat, s.RemoteIp(), output.Header.Seq, costTime, slowStr, output.Header.Uri, output.Size, bodyLogBytes(output), input.Size, colorCode(input.Header.StatusCode), input.Header.Status, bodyLogBytes(input))
+				logformat := "[pull-launch] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nSEND:\n size: %d\n body[-json]: %s\nRECV:\n size: %d\n status: %s\n body[-json]: %s\n"
+				printFunc(logformat, s.RemoteIp(), output.Header.Seq, costTime, slowStr, output.Header.Uri, output.Size, bodyLogBytes(output), input.Size, getRerrorBytes(input.Header), bodyLogBytes(input))
 			} else {
-				logformat := "[pull-launch] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nSEND:\n size: %d\nRECV:\n size: %d\n status: %s %s\n"
-				printFunc(logformat, s.RemoteIp(), output.Header.Seq, costTime, slowStr, output.Header.Uri, output.Size, input.Size, colorCode(input.Header.StatusCode), input.Header.Status)
+				logformat := "[pull-launch] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nSEND:\n size: %d\nRECV:\n size: %d\n status: %s\n"
+				printFunc(logformat, s.RemoteIp(), output.Header.Seq, costTime, slowStr, output.Header.Uri, output.Size, input.Size, getRerrorBytes(input.Header))
 			}
 
 		case typePullHandle:
 			if s.peer.printBody {
-				logformat := "[pull-handle] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nRECV:\n size: %d\n body[-json]: %s\nSEND:\n size: %d\n status: %s %s\n body[-json]: %s\n"
-				printFunc(logformat, s.RemoteIp(), input.Header.Seq, costTime, slowStr, input.Header.Uri, input.Size, bodyLogBytes(input), output.Size, colorCode(output.Header.StatusCode), output.Header.Status, bodyLogBytes(output))
+				logformat := "[pull-handle] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nRECV:\n size: %d\n body[-json]: %s\nSEND:\n size: %d\n status: %s\n body[-json]: %s\n"
+				printFunc(logformat, s.RemoteIp(), input.Header.Seq, costTime, slowStr, input.Header.Uri, input.Size, bodyLogBytes(input), output.Size, getRerrorBytes(output.Header), bodyLogBytes(output))
 			} else {
-				logformat := "[pull-handle] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nRECV:\n size: %d\nSEND:\n size: %d\n status: %s %s\n"
-				printFunc(logformat, s.RemoteIp(), input.Header.Seq, costTime, slowStr, input.Header.Uri, input.Size, output.Size, colorCode(output.Header.StatusCode), output.Header.Status)
+				logformat := "[pull-handle] remote-ip: %s | seq: %d | cost-time: %s%s | uri: %-30s |\nRECV:\n size: %d\nSEND:\n size: %d\n status: %s\n"
+				printFunc(logformat, s.RemoteIp(), input.Header.Seq, costTime, slowStr, input.Header.Uri, input.Size, output.Size, getRerrorBytes(output.Header))
 			}
 		}
 	} else {
@@ -694,20 +676,20 @@ func (s *session) runlog(costTime time.Duration, input, output *socket.Packet, l
 
 		case typePullLaunch:
 			if s.peer.printBody {
-				logformat := "[pull-launch] remote-ip: %s | seq: %d | uri: %-30s |\nSEND:\n size: %d\n body[-json]: %s\nRECV:\n size: %d\n status: %s %s\n body[-json]: %s\n"
-				Infof(logformat, s.RemoteIp(), output.Header.Seq, output.Header.Uri, output.Size, bodyLogBytes(output), input.Size, colorCode(input.Header.StatusCode), input.Header.Status, bodyLogBytes(input))
+				logformat := "[pull-launch] remote-ip: %s | seq: %d | uri: %-30s |\nSEND:\n size: %d\n body[-json]: %s\nRECV:\n size: %d\n status: %s\n body[-json]: %s\n"
+				Infof(logformat, s.RemoteIp(), output.Header.Seq, output.Header.Uri, output.Size, bodyLogBytes(output), input.Size, getRerrorBytes(input.Header), bodyLogBytes(input))
 			} else {
-				logformat := "[pull-launch] remote-ip: %s | seq: %d | uri: %-30s |\nSEND:\n size: %d\nRECV:\n size: %d\n status: %s %s\n"
-				Infof(logformat, s.RemoteIp(), output.Header.Seq, output.Header.Uri, output.Size, input.Size, colorCode(input.Header.StatusCode), input.Header.Status)
+				logformat := "[pull-launch] remote-ip: %s | seq: %d | uri: %-30s |\nSEND:\n size: %d\nRECV:\n size: %d\n status: %s\n"
+				Infof(logformat, s.RemoteIp(), output.Header.Seq, output.Header.Uri, output.Size, input.Size, getRerrorBytes(input.Header))
 			}
 
 		case typePullHandle:
 			if s.peer.printBody {
-				logformat := "[pull-handle] remote-ip: %s | seq: %d | uri: %-30s |\nRECV:\n size: %d\n body[-json]: %s\nSEND:\n size: %d\n status: %s %s\n body[-json]: %s\n"
-				Infof(logformat, s.RemoteIp(), input.Header.Seq, input.Header.Uri, input.Size, bodyLogBytes(input), output.Size, colorCode(output.Header.StatusCode), output.Header.Status, bodyLogBytes(output))
+				logformat := "[pull-handle] remote-ip: %s | seq: %d | uri: %-30s |\nRECV:\n size: %d\n body[-json]: %s\nSEND:\n size: %d\n status: %s\n body[-json]: %s\n"
+				Infof(logformat, s.RemoteIp(), input.Header.Seq, input.Header.Uri, input.Size, bodyLogBytes(input), output.Size, getRerrorBytes(output.Header), bodyLogBytes(output))
 			} else {
-				logformat := "[pull-handle] remote-ip: %s | seq: %d | uri: %-30s |\nRECV:\n size: %d\nSEND:\n size: %d\n status: %s %s\n"
-				Infof(logformat, s.RemoteIp(), input.Header.Seq, input.Header.Uri, input.Size, output.Size, colorCode(output.Header.StatusCode), output.Header.Status)
+				logformat := "[pull-handle] remote-ip: %s | seq: %d | uri: %-30s |\nRECV:\n size: %d\nSEND:\n size: %d\n status: %s\n"
+				Infof(logformat, s.RemoteIp(), input.Header.Seq, input.Header.Uri, input.Size, output.Size, getRerrorBytes(output.Header))
 			}
 		}
 	}
@@ -742,7 +724,7 @@ func bodyLogBytes(packet *socket.Packet) []byte {
 }
 
 func isJsonBody(packet *socket.Packet) bool {
-	if packet != nil && packet.BodyCodec == "json" {
+	if packet != nil && packet.BodyType == codec.ID_JSON {
 		return true
 	}
 	return false

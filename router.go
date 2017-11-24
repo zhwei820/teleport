@@ -22,6 +22,7 @@ import (
 
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/goutil/errors"
+	"github.com/henrylee2cn/teleport/codec"
 )
 
 // Router the router of pull or push.
@@ -108,19 +109,18 @@ func (r *Router) SetUnknown(unknownHandler interface{}, plugin ...Plugin) {
 	switch r.typ {
 	case "pull":
 		h.name = "unknown_pull_handle"
-		fn, ok := unknownHandler.(func(ctx UnknownPullCtx) (interface{}, Xerror))
+		fn, ok := unknownHandler.(func(ctx UnknownPullCtx) (interface{}, *Rerror))
 		if !ok {
-			Fatalf("*Router.SetUnknown(): %s handler needs type:\n func(ctx UnknownPullCtx) (reply interface{}, xerr Xerror)", h.name)
+			Fatalf("*Router.SetUnknown(): %s handler needs type:\n func(ctx UnknownPullCtx) (reply interface{}, rerr *Rerror)", h.name)
 		}
 		h.unknownHandleFunc = func(ctx *readHandleCtx) {
-			body, xerr := fn(ctx)
-			if xerr != nil {
-				ctx.output.Header.StatusCode = xerr.Code()
-				ctx.output.Header.Status = xerr.Text()
+			body, rerr := fn(ctx)
+			if rerr != nil {
+				rerr.SetToMeta(ctx.output.Header)
 			} else if body != nil {
 				ctx.output.Body = body
-				if len(ctx.output.BodyCodec) == 0 {
-					ctx.output.BodyCodec = ctx.input.BodyCodec
+				if ctx.output.BodyType == codec.NilCodecId {
+					ctx.output.BodyType = ctx.input.BodyType
 				}
 			}
 		}
@@ -133,8 +133,8 @@ func (r *Router) SetUnknown(unknownHandler interface{}, plugin ...Plugin) {
 		}
 		h.unknownHandleFunc = func(ctx *readHandleCtx) {
 			fn(ctx)
-			if len(ctx.output.BodyCodec) == 0 {
-				ctx.output.BodyCodec = ctx.input.BodyCodec
+			if ctx.output.BodyType == codec.NilCodecId {
+				ctx.output.BodyType = ctx.input.BodyType
 			}
 		}
 	}
@@ -238,8 +238,8 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 		}
 
 		// The return type of the method must be Error.
-		if returnType := mtype.Out(1); returnType.Name() != "Xerror" {
-			return nil, errors.Errorf("register pull handler: %s.%s second reply type %s not teleport.Xerror", ctype.String(), mname, returnType)
+		if returnType := mtype.Out(1); returnType.Name() != "*Rerror" {
+			return nil, errors.Errorf("register pull handler: %s.%s second reply type %s not teleport.*Rerror", ctype.String(), mname, returnType)
 		}
 
 		var methodFunc = method.Func
@@ -249,13 +249,12 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 			*((*PullCtx)(unsafe.Pointer(pullCtxPtr))) = ctx
 			rets := methodFunc.Call([]reflect.Value{ctrl, argValue})
 			ctx.output.Body = rets[0].Interface()
-			xerr, _ := rets[1].Interface().(Xerror)
-			if xerr != nil {
-				ctx.output.Header.StatusCode = xerr.Code()
-				ctx.output.Header.Status = xerr.Text()
+			rerr, _ := rets[1].Interface().(*Rerror)
+			if rerr != nil {
+				rerr.SetToMeta(ctx.output.Header)
 
-			} else if ctx.output.Body != nil && len(ctx.output.BodyCodec) == 0 {
-				ctx.output.BodyCodec = ctx.input.BodyCodec
+			} else if ctx.output.Body != nil && ctx.output.BodyType == codec.NilCodecId {
+				ctx.output.BodyType = ctx.input.BodyType
 			}
 		}
 

@@ -33,7 +33,7 @@ type CodecWriter struct {
 }
 
 // Note: reseting the temporary buffer when return the *CodecWriter
-func (s *socket) getCodecWriter(codecName string, w io.Writer) (*CodecWriter, error) {
+func (s *socket) getCodecWriter(bodyType byte, w io.Writer) (*CodecWriter, error) {
 	t, ok := s.codecWriterMap[codecName]
 	if ok {
 		t.Writer = w

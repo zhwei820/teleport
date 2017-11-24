@@ -78,8 +78,8 @@ Peer -> Connection -> Socket -> Session -> Context
 type Packet struct {
     // HeaderCodec header codec string
     HeaderCodec string
-    // BodyCodec body codec string
-    BodyCodec string
+    // BodyType body codec string
+    BodyType string
     // header content
     Header *Header `json:"header"`
     // body content
@@ -118,7 +118,7 @@ type Header struct {
 默认的通信协议：
 
 ```
-HeaderLength | HeaderCodecId | Header | BodyLength | BodyCodecId | Body
+HeaderLength | HeaderCodecId | Header | BodyLength | BodyTypeId | Body
 ```
 
 **注意：**
@@ -127,9 +127,9 @@ HeaderLength | HeaderCodecId | Header | BodyLength | BodyCodecId | Body
 - `HeaderCodecId`: uint8, 1 byte
 - `Header`: header bytes
 - `BodyLength`: uint32, 4 bytes, big endian
-    * 可能为0，表示`Body`为空且不指明`BodyCodecId`
-    * 可能为1，表示`Body`为空但是指明`BodyCodecId`
-- `BodyCodecId`: uint8, 1 byte
+    * 可能为0，表示`Body`为空且不指明`BodyTypeId`
+    * 可能为1，表示`Body`为空但是指明`BodyTypeId`
+- `BodyTypeId`: uint8, 1 byte
 - `Body`: body bytes
 
 
@@ -142,7 +142,7 @@ type Protocol interface {
     WritePacket(
         packet *Packet,
         destWriter *utils.BufioWriter,
-        codecWriterMaker func(codecName string, w io.Writer) (*CodecWriter, error),
+        codecWriterMaker func(bodyType byte, w io.Writer) (*CodecWriter, error),
         isActiveClosed func() bool,
     ) error
 
@@ -162,10 +162,10 @@ type Protocol interface {
 
 ```go
 func SetDefaultProtocol(socket.Protocol)
-func (*Peer) ServeConn(conn net.Conn, protocolFunc ...socket.ProtocolFunc) Session
-func (*Peer) DialContext(ctx context.Context, addr string, protocolFunc ...socket.ProtocolFunc) (Session, error)
-func (*Peer) Dial(addr string, protocolFunc ...socket.ProtocolFunc) (Session, error)
-func (*Peer) Listen(protocolFunc ...socket.ProtocolFunc) error
+func (*Peer) ServeConn(conn net.Conn, protoFunc ...socket.ProtoFunc) Session
+func (*Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, error)
+func (*Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, error)
+func (*Peer) Listen(protoFunc ...socket.ProtoFunc) error
 ```
 
 
@@ -181,7 +181,7 @@ var cfg = &tp.PeerConfig{
     TlsKeyFile:           "",
     SlowCometDuration:    time.Millisecond * 500,
     DefaultHeaderCodec:   "protobuf",
-    DefaultBodyCodec:     "json",
+    DefaultBodyType:     "json",
     DefaultBodyGzipLevel: 5,
     PrintBody:            true,
     DefaultDialTimeout:   time.Second * 10,
@@ -212,7 +212,7 @@ type Home struct {
 }
 
 // Test handler
-func (h *Home) Test(args *[2]int) (int, tp.Xerror) {
+func (h *Home) Test(args *[2]int) (int, tp.*Rerror) {
     a := (*args)[0]
     b := (*args)[1]
     return a + b, nil
@@ -236,11 +236,11 @@ func (m *Msg) Test(args *map[string]interface{}) {
 - 定义处理未知拉取请求的操作
 
 ```go
-func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.Xerror) {
+func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.*Rerror) {
     var v interface{}
     codecName, err := ctx.Unmarshal(*body, &v, true)
     if err != nil {
-        return nil, tp.NewXerror(0, err.Error())
+        return nil, tp.New*Rerror(0, err.Error())
     }
     tp.Infof("receive unknown pull:\n codec: %s\n content: %#v", codecName, v)
     return "this is reply string for unknown pull", nil
@@ -287,7 +287,7 @@ func (p *AliasPlugin) Name() string {
 }
 
 // PostReadPullHeader converts the alias of this service.
-func (p *AliasPlugin) PostReadPullHeader(ctx tp.ReadCtx) tp.Xerror {
+func (p *AliasPlugin) PostReadPullHeader(ctx tp.ReadCtx) tp.*Rerror {
     var u = ctx.Input().Header.Uri
     if p.Aliases != nil {
         if a = p.Aliases[u]; a != "" {
@@ -338,7 +338,7 @@ func main() {
         TlsKeyFile:           "",
         SlowCometDuration:    time.Millisecond * 500,
         DefaultHeaderCodec:   "protobuf",
-        DefaultBodyCodec:     "json",
+        DefaultBodyType:     "json",
         DefaultBodyGzipLevel: 5,
         PrintBody:            true,
         ListenAddrs: []string{
@@ -361,7 +361,7 @@ type Home struct {
 }
 
 // Test handler
-func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.Xerror) {
+func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.*Rerror) {
     h.Session().Push("/push/test?tag=from home-test", map[string]interface{}{
         "your_id": h.Query().Get("peer_id"),
         "a":       1,
@@ -372,11 +372,11 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.Xe
     }, nil
 }
 
-func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.Xerror) {
+func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.*Rerror) {
     var v interface{}
     codecName, err := ctx.Unmarshal(*body, &v, true)
     if err != nil {
-        return nil, tp.NewXerror(0, err.Error())
+        return nil, tp.New*Rerror(0, err.Error())
     }
     tp.Debugf("unmarshal body: codec: %s, content: %#v", codecName, v)
     return []string{"a", "aa", "aaa"}, nil
@@ -404,7 +404,7 @@ func main() {
         TlsKeyFile:           "",
         SlowCometDuration:    time.Millisecond * 500,
         DefaultHeaderCodec:   "protobuf",
-        DefaultBodyCodec:     "json",
+        DefaultBodyType:     "json",
         DefaultBodyGzipLevel: 5,
         PrintBody:            false,
     }
@@ -425,8 +425,8 @@ func main() {
             &reply,
         )
 
-        if pullcmd.Xerror() != nil {
-            tp.Fatalf("pull error: %v", pullcmd.Xerror().Error())
+        if pullcmd.*Rerror() != nil {
+            tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
         }
         tp.Infof("9090reply: %#v", reply)
     }
@@ -444,8 +444,8 @@ func main() {
             &reply,
         )
 
-        if pullcmd.Xerror() != nil {
-            tp.Fatalf("pull error: %v", pullcmd.Xerror().Error())
+        if pullcmd.*Rerror() != nil {
+            tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
         }
         tp.Infof("9091reply test_unknown: %#v", reply)
     }

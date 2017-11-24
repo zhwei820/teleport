@@ -1,9 +1,9 @@
-package teleport
+package tp
 
 import (
 	"testing"
 
-	"github.com/henrylee2cn/teleport/utils"
+	"github.com/henrylee2cn/teleport/socket"
 )
 
 func TestRerror(t *testing.T) {
@@ -14,11 +14,11 @@ func TestRerror(t *testing.T) {
 	t.Logf("%v", reErr)
 	reErr.Detail = `"bala...bala..."`
 	t.Logf("%v", reErr)
-	meta := &utils.Args{}
-	reErr.SetToMeta(meta)
-	t.Logf("%v", meta.String())
-	b := meta.Peek(MetaRerrorKey)
+	header := new(socket.Header)
+	reErr.SetToMeta(header)
+	t.Logf("%v", header.Meta.String())
+	b := header.Peek(MetaRerrorKey)
 	t.Logf("%s", b)
-	newReErr := NewRerrorFromMeta(meta)
+	newReErr := NewRerrorFromMeta(header)
 	t.Logf("%v", newReErr)
 }

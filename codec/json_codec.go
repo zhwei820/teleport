@@ -18,8 +18,11 @@ import (
 	"encoding/json"
 )
 
-// ID_JSON json codec id
-const ID_JSON = 'j'
+// json codec id
+const (
+	NAME_JSON = "json"
+	ID_JSON   = 'j'
+)
 
 func init() {
 	Reg(new(JsonCodec))
@@ -27,6 +30,11 @@ func init() {
 
 // JsonCodec json codec
 type JsonCodec struct{}
+
+// Name returns codec string
+func (JsonCodec) Name() string {
+	return NAME_JSON
+}
 
 // Id returns codec id
 func (JsonCodec) Id() byte {

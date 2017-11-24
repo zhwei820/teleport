@@ -24,30 +24,29 @@ import (
 
 	"github.com/henrylee2cn/goutil"
 	"github.com/henrylee2cn/goutil/errors"
+	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
 )
 
 // Peer peer which is server or client.
 type Peer struct {
-	PullRouter           *Router
-	PushRouter           *Router
-	pluginContainer      PluginContainer
-	sessHub              *SessionHub
-	closeCh              chan struct{}
-	freeContext          *readHandleCtx
-	ctxLock              sync.Mutex
-	defaultReadTimeout   int32 // time.Duration // readdeadline for underlying net.Conn
-	defaultWriteTimeout  int32 // time.Duration // writedeadline for underlying net.Conn
-	tlsConfig            *tls.Config
-	slowCometDuration    time.Duration
-	defaultHeaderCodec   string
-	defaultBodyCodec     string
-	defaultBodyGzipLevel int32
-	printBody            bool
-	countTime            bool
-	timeNow              func() time.Time
-	timeSince            func(time.Time) time.Duration
-	mu                   sync.Mutex
+	PullRouter          *Router
+	PushRouter          *Router
+	pluginContainer     PluginContainer
+	sessHub             *SessionHub
+	closeCh             chan struct{}
+	freeContext         *readHandleCtx
+	ctxLock             sync.Mutex
+	defaultReadTimeout  int32 // time.Duration // readdeadline for underlying net.Conn
+	defaultWriteTimeout int32 // time.Duration // writedeadline for underlying net.Conn
+	tlsConfig           *tls.Config
+	slowCometDuration   time.Duration
+	defaultBodyType     byte
+	printBody           bool
+	countTime           bool
+	timeNow             func() time.Time
+	timeSince           func(time.Time) time.Duration
+	mu                  sync.Mutex
 
 	// for client role
 	defaultDialTimeout time.Duration
@@ -68,21 +67,23 @@ func NewPeer(cfg *PeerConfig, plugin ...Plugin) *Peer {
 		Fatalf("%v", err)
 	}
 	var p = &Peer{
-		PullRouter:           newPullRouter(pluginContainer),
-		PushRouter:           newPushRouter(pluginContainer),
-		pluginContainer:      pluginContainer,
-		sessHub:              newSessionHub(),
-		defaultReadTimeout:   int32(cfg.DefaultReadTimeout),
-		defaultWriteTimeout:  int32(cfg.DefaultWriteTimeout),
-		closeCh:              make(chan struct{}),
-		slowCometDuration:    slowCometDuration,
-		defaultDialTimeout:   cfg.DefaultDialTimeout,
-		listenAddrs:          cfg.ListenAddrs,
-		defaultHeaderCodec:   cfg.DefaultHeaderCodec,
-		defaultBodyCodec:     cfg.DefaultBodyCodec,
-		defaultBodyGzipLevel: cfg.DefaultBodyGzipLevel,
-		printBody:            cfg.PrintBody,
-		countTime:            cfg.CountTime,
+		PullRouter:          newPullRouter(pluginContainer),
+		PushRouter:          newPushRouter(pluginContainer),
+		pluginContainer:     pluginContainer,
+		sessHub:             newSessionHub(),
+		defaultReadTimeout:  int32(cfg.DefaultReadTimeout),
+		defaultWriteTimeout: int32(cfg.DefaultWriteTimeout),
+		closeCh:             make(chan struct{}),
+		slowCometDuration:   slowCometDuration,
+		defaultDialTimeout:  cfg.DefaultDialTimeout,
+		listenAddrs:         cfg.ListenAddrs,
+		printBody:           cfg.PrintBody,
+		countTime:           cfg.CountTime,
+	}
+	if c, err := codec.GetByName(cfg.DefaultBodyType); err != nil {
+		Fatalf("%v", err)
+	} else {
+		p.defaultBodyType = c.Id()
 	}
 	if p.countTime {
 		p.timeNow = time.Now
@@ -116,14 +117,14 @@ func (p *Peer) CountSession() int {
 }
 
 // ServeConn serves the connection and returns a session.
-func (p *Peer) ServeConn(conn net.Conn, protocolFunc ...socket.ProtocolFunc) Session {
-	var session = newSession(p, conn, protocolFunc)
+func (p *Peer) ServeConn(conn net.Conn, protoFunc ...socket.ProtoFunc) Session {
+	var session = newSession(p, conn, protoFunc)
 	p.sessHub.Set(session)
 	return session
 }
 
 // Dial connects with the peer of the destination address.
-func (p *Peer) Dial(addr string, protocolFunc ...socket.ProtocolFunc) (Session, error) {
+func (p *Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, error) {
 	var conn, err = net.DialTimeout("tcp", addr, p.defaultDialTimeout)
 	if err != nil {
 		return nil, err
@@ -131,7 +132,7 @@ func (p *Peer) Dial(addr string, protocolFunc ...socket.ProtocolFunc) (Session, 
 	if p.tlsConfig != nil {
 		conn = tls.Client(conn, p.tlsConfig)
 	}
-	var sess = newSession(p, conn, protocolFunc)
+	var sess = newSession(p, conn, protoFunc)
 	sess.socket.SetId(sess.LocalIp())
 	if err = p.pluginContainer.PostDial(sess); err != nil {
 		sess.Close()
@@ -145,7 +146,7 @@ func (p *Peer) Dial(addr string, protocolFunc ...socket.ProtocolFunc) (Session, 
 
 // DialContext connects with the peer of the destination address,
 // using the provided context.
-func (p *Peer) DialContext(ctx context.Context, addr string, protocolFunc ...socket.ProtocolFunc) (Session, error) {
+func (p *Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, error) {
 	var d net.Dialer
 	var conn, err = d.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -154,7 +155,7 @@ func (p *Peer) DialContext(ctx context.Context, addr string, protocolFunc ...soc
 	if p.tlsConfig != nil {
 		conn = tls.Client(conn, p.tlsConfig)
 	}
-	var sess = newSession(p, conn, protocolFunc)
+	var sess = newSession(p, conn, protoFunc)
 	sess.socket.SetId(sess.LocalIp())
 	if err = p.pluginContainer.PostDial(sess); err != nil {
 		sess.Close()
@@ -170,7 +171,7 @@ func (p *Peer) DialContext(ctx context.Context, addr string, protocolFunc ...soc
 var ErrListenClosed = errors.New("listener is closed")
 
 // Listen turns on the listening service.
-func (p *Peer) Listen(protocolFunc ...socket.ProtocolFunc) error {
+func (p *Peer) Listen(protoFunc ...socket.ProtoFunc) error {
 	var (
 		wg    sync.WaitGroup
 		count = len(p.listenAddrs)
@@ -180,7 +181,7 @@ func (p *Peer) Listen(protocolFunc ...socket.ProtocolFunc) error {
 	for _, addr := range p.listenAddrs {
 		go func(addr string) {
 			defer wg.Done()
-			errCh <- p.listen(addr, protocolFunc)
+			errCh <- p.listen(addr, protoFunc)
 		}(addr)
 	}
 	wg.Wait()
@@ -193,7 +194,7 @@ func (p *Peer) Listen(protocolFunc ...socket.ProtocolFunc) error {
 	return errs
 }
 
-func (p *Peer) listen(addr string, protocolFuncs []socket.ProtocolFunc) error {
+func (p *Peer) listen(addr string, protoFuncs []socket.ProtoFunc) error {
 	var lis, err = listen(addr, p.tlsConfig)
 	if err != nil {
 		Fatalf("%v", err)
@@ -248,7 +249,7 @@ func (p *Peer) listen(addr string, protocolFuncs []socket.ProtocolFunc) error {
 				time.Sleep(time.Second)
 				goto TRYGO
 			}
-		}(newSession(p, rw, protocolFuncs))
+		}(newSession(p, rw, protoFuncs))
 	}
 }
 

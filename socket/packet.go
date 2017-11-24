@@ -105,7 +105,15 @@ func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
 		return err
 	}
 	p.Body = p.NewBody(p.Header)
-	return c.Unmarshal(bodyBytes, p.Body)
+	switch body := p.Body.(type) {
+	default:
+		return c.Unmarshal(bodyBytes, p.Body)
+	case *[]byte:
+		if body != nil {
+			*body = bodyBytes
+		}
+		return nil
+	}
 }
 
 var packetStack = new(struct {
