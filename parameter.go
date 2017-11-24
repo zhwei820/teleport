@@ -47,33 +47,10 @@ func TypeText(typ byte) string {
 	}
 }
 
-// Internal Framework Rerror string.
-var (
-	rerror_connClosed  = NewRerror(CodeConnClosed, "Connection Closed", "")
-	rerror_writeFailed = NewRerror(CodeWriteFailed, "Write Failed", "")
-)
-
-var (
-	// methodNotAllowed_metaSetting = metaSetting(NewRerror(405, "Type Not Allowed", "").Error())
-	connClosed_metaSetting     = metaSetting(rerror_connClosed.Error())
-	notFound_metaSetting       = metaSetting(NewRerror(CodeNotFound, "Not Found", "").Error())
-	writeFailed_metaSetting    = metaSetting(rerror_writeFailed.Error())
-	notImplemented_metaSetting = metaSetting(NewRerror(CodeNotImplemented, "Not Implemented", "").Error())
-	badPacket_metaSetting      = metaSetting(NewRerror(CodeBadPacket, "Bad Packet", "").Error())
-)
-
-type metaSetting string
-
-func (m metaSetting) Inject(header *socket.Header, detail ...string) {
-	if len(detail) > 0 {
-		m = m[:len(m)-2] + metaSetting(bytes.Replace(goutil.StringToBytes(detail[0]), re_d, re_e, -1)) + m[len(m)-2:]
-	}
-	header.Meta.Set(MetaRerrorKey, *(*string)(unsafe.Pointer(&m)))
-}
-
 // Internal Framework Rerror code.
 // Note: Recommended custom code is greater than 1000.
 const (
+	CodeDialFailed     = 105
 	CodeConnClosed     = 102
 	CodeWriteFailed    = 104
 	CodeBadPacket      = 400
@@ -94,3 +71,28 @@ const (
 	// CodeNotExtended                   = 510
 	// CodeNetworkAuthenticationRequired = 511
 )
+
+// Internal Framework Rerror string.
+var (
+	rerror_dialFailed  = NewRerror(CodeDialFailed, "Dial Failed", "")
+	rerror_connClosed  = NewRerror(CodeConnClosed, "Connection Closed", "")
+	rerror_writeFailed = NewRerror(CodeWriteFailed, "Write Failed", "")
+)
+
+var (
+	// methodNotAllowed_metaSetting = metaSetting(NewRerror(405, "Type Not Allowed", "").String())
+	connClosed_metaSetting     = metaSetting(rerror_connClosed.String())
+	notFound_metaSetting       = metaSetting(NewRerror(CodeNotFound, "Not Found", "").String())
+	writeFailed_metaSetting    = metaSetting(rerror_writeFailed.String())
+	notImplemented_metaSetting = metaSetting(NewRerror(CodeNotImplemented, "Not Implemented", "").String())
+	badPacket_metaSetting      = metaSetting(NewRerror(CodeBadPacket, "Bad Packet", "").String())
+)
+
+type metaSetting string
+
+func (m metaSetting) Inject(header *socket.Header, detail ...string) {
+	if len(detail) > 0 {
+		m = m[:len(m)-2] + metaSetting(bytes.Replace(goutil.StringToBytes(detail[0]), re_d, re_e, -1)) + m[len(m)-2:]
+	}
+	header.Meta.Set(MetaRerrorKey, *(*string)(unsafe.Pointer(&m)))
+}

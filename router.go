@@ -207,7 +207,7 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 		mtype := method.Type
 		mname := method.Name
 		// Method must be exported.
-		if method.PkgPath != "" || isPullCtxMethod(mname) {
+		if method.PkgPath != "" || isPullCtxType(mname) {
 			continue
 		}
 		// Method needs two ins: receiver, *args.
@@ -238,8 +238,8 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 		}
 
 		// The return type of the method must be Error.
-		if returnType := mtype.Out(1); returnType.Name() != "*Rerror" {
-			return nil, errors.Errorf("register pull handler: %s.%s second reply type %s not teleport.*Rerror", ctype.String(), mname, returnType)
+		if returnType := mtype.Out(1); !isRerrorType(returnType.String()) {
+			return nil, errors.Errorf("register pull handler: %s.%s second reply type %s not *tp.Rerror", ctype.String(), mname, returnType)
 		}
 
 		var methodFunc = method.Func
@@ -318,7 +318,7 @@ func pushHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 		mtype := method.Type
 		mname := method.Name
 		// Method must be exported.
-		if method.PkgPath != "" || isPushCtxMethod(mname) {
+		if method.PkgPath != "" || isPushCtxType(mname) {
 			continue
 		}
 		// Method needs two ins: receiver, *args.
@@ -362,7 +362,7 @@ func pushHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 	return handlers, nil
 }
 
-func isPullCtxMethod(name string) bool {
+func isPullCtxType(name string) bool {
 	ctype := reflect.TypeOf(PullCtx(new(readHandleCtx)))
 	for m := 0; m < ctype.NumMethod(); m++ {
 		if name == ctype.Method(m).Name {
@@ -372,7 +372,7 @@ func isPullCtxMethod(name string) bool {
 	return false
 }
 
-func isPushCtxMethod(name string) bool {
+func isPushCtxType(name string) bool {
 	ctype := reflect.TypeOf(PushCtx(new(readHandleCtx)))
 	for m := 0; m < ctype.NumMethod(); m++ {
 		if name == ctype.Method(m).Name {
@@ -380,6 +380,10 @@ func isPushCtxMethod(name string) bool {
 		}
 	}
 	return false
+}
+
+func isRerrorType(s string) bool {
+	return strings.HasPrefix(s, "*") && strings.HasSuffix(s, ".Rerror")
 }
 
 func ctrlStructSnakeName(ctype reflect.Type) string {

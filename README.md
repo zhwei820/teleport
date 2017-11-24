@@ -209,7 +209,7 @@ type Home struct {
 }
 
 // Test handler
-func (h *Home) Test(args *[2]int) (int, tp.*Rerror) {
+func (h *Home) Test(args *[2]int) (int, *tp.Rerror) {
 	a := (*args)[0]
 	b := (*args)[1]
 	return a + b, nil
@@ -233,13 +233,13 @@ func (m *Msg) Test(args *map[string]interface{}) {
 - Define a handler for unknown pull request
 
 ```go
-func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.*Rerror) {
+func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, *tp.Rerror) {
 	var v interface{}
-	codecName, err := ctx.Unmarshal(*body, &v, true)
+	codecId, err := ctx.Unmarshal(*body, &v, true)
 	if err != nil {
 		return nil, tp.New*Rerror(0, err.Error())
 	}
-	tp.Infof("receive unknown pull:\n codec: %s\n content: %#v", codecName, v)
+	tp.Infof("receive unknown pull:\n codec: %s\n content: %#v", codecId, v)
 	return "this is reply string for unknown pull", nil
 }
 
@@ -250,11 +250,11 @@ func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.*Re
 ```go
 func UnknownPushHandle(ctx tp.UnknownPushCtx, body *[]byte) {
 	var v interface{}
-	codecName, err := ctx.Unmarshal(*body, &v, true)
+	codecId, err := ctx.Unmarshal(*body, &v, true)
 	if err != nil {
 		tp.Errorf("%v", err)
 	} else {
-		tp.Infof("receive unknown push:\n codec: %s\n content: %#v", codecName, v)
+		tp.Infof("receive unknown push:\n codec: %s\n content: %#v", codecId, v)
 	}
 }
 ```
@@ -284,7 +284,7 @@ func (p *AliasPlugin) Name() string {
 }
 
 // PostReadPullHeader converts the alias of this service.
-func (p *AliasPlugin) PostReadPullHeader(ctx tp.ReadCtx) tp.*Rerror {
+func (p *AliasPlugin) PostReadPullHeader(ctx tp.ReadCtx) *tp.Rerror {
 	var u = ctx.Input().Header.Uri
 	if p.Aliases != nil {
 		if a = p.Aliases[u]; a != "" {
@@ -358,7 +358,7 @@ type Home struct {
 }
 
 // Test handler
-func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.*Rerror) {
+func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, *tp.Rerror) {
 	h.Session().Push("/push/test?tag=from home-test", map[string]interface{}{
 		"your_id": h.Query().Get("peer_id"),
 		"a":       1,
@@ -369,13 +369,13 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, tp.*R
 	}, nil
 }
 
-func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, tp.*Rerror) {
+func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, *tp.Rerror) {
 	var v interface{}
-	codecName, err := ctx.Unmarshal(*body, &v, true)
+	codecId, err := ctx.Unmarshal(*body, &v, true)
 	if err != nil {
 		return nil, tp.New*Rerror(0, err.Error())
 	}
-	tp.Debugf("unmarshal body: codec: %s, content: %#v", codecName, v)
+	tp.Debugf("unmarshal body: codec: %s, content: %#v", codecId, v)
 	return []string{"a", "aa", "aaa"}, nil
 }
 ```
@@ -422,8 +422,8 @@ func main() {
 			&reply,
 		)
 
-		if pullcmd.*Rerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
+		if pullcmd.Rerror() != nil {
+			tp.Fatalf("pull error: %v", pullcmd.Rerror().Error())
 		}
 		tp.Infof("9090reply: %#v", reply)
 	}
@@ -441,8 +441,8 @@ func main() {
 			&reply,
 		)
 
-		if pullcmd.*Rerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.*Rerror().Error())
+		if pullcmd.Rerror() != nil {
+			tp.Fatalf("pull error: %v", pullcmd.Rerror().Error())
 		}
 		tp.Infof("9091reply test_unknown: %#v", reply)
 	}

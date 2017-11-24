@@ -230,7 +230,7 @@ func (p *pluginContainer) PostReg(h *Handler) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostRegPlugin); ok {
 			if rerr = _plugin.PostReg(h); rerr != nil {
-				Fatalf("%s-PostRegPlugin(%s)", plugin.Name(), rerr.Error())
+				Fatalf("%s-PostRegPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -243,7 +243,7 @@ func (p *pluginContainer) PostDial(sess PreSession) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostDialPlugin); ok {
 			if rerr = _plugin.PostDial(sess); rerr != nil {
-				Debugf("dial fail (addr: %s, id: %s): %s-PostDialPlugin(%s)", sess.RemoteIp(), sess.Id(), plugin.Name(), rerr.Error())
+				Debugf("dial fail (addr: %s, id: %s): %s-PostDialPlugin(%s)", sess.RemoteIp(), sess.Id(), plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -256,7 +256,7 @@ func (p *pluginContainer) PostAccept(sess PreSession) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostAcceptPlugin); ok {
 			if rerr = _plugin.PostAccept(sess); rerr != nil {
-				Debugf("accept session(addr: %s, id: %s): %s-PostAcceptPlugin(%s)", sess.RemoteIp(), sess.Id(), plugin.Name(), rerr.Error())
+				Debugf("accept session(addr: %s, id: %s): %s-PostAcceptPlugin(%s)", sess.RemoteIp(), sess.Id(), plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -269,7 +269,7 @@ func (p *pluginContainer) PreWritePull(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreWritePullPlugin); ok {
 			if rerr = _plugin.PreWritePull(ctx); rerr != nil {
-				Debugf("%s-PreWritePullPlugin(%s)", plugin.Name(), rerr.Error())
+				Debugf("%s-PreWritePullPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -282,7 +282,7 @@ func (p *pluginContainer) PostWritePull(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostWritePullPlugin); ok {
 			if rerr = _plugin.PostWritePull(ctx); rerr != nil {
-				Errorf("%s-PostWritePullPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostWritePullPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -295,7 +295,7 @@ func (p *pluginContainer) PreWriteReply(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreWriteReplyPlugin); ok {
 			if rerr = _plugin.PreWriteReply(ctx); rerr != nil {
-				Errorf("%s-PreWriteReplyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PreWriteReplyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -308,7 +308,7 @@ func (p *pluginContainer) PostWriteReply(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostWriteReplyPlugin); ok {
 			if rerr = _plugin.PostWriteReply(ctx); rerr != nil {
-				Errorf("%s-PostWriteReplyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostWriteReplyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -321,7 +321,7 @@ func (p *pluginContainer) PreWritePush(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreWritePushPlugin); ok {
 			if rerr = _plugin.PreWritePush(ctx); rerr != nil {
-				Debugf("%s-PreWritePushPlugin(%s)", plugin.Name(), rerr.Error())
+				Debugf("%s-PreWritePushPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -334,7 +334,7 @@ func (p *pluginContainer) PostWritePush(ctx WriteCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostWritePushPlugin); ok {
 			if rerr = _plugin.PostWritePush(ctx); rerr != nil {
-				Errorf("%s-PostWritePushPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostWritePushPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -347,7 +347,7 @@ func (p *pluginContainer) PreReadHeader(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreReadHeaderPlugin); ok {
 			if rerr = _plugin.PreReadHeader(ctx); rerr != nil {
-				Debugf("disconnected when reading: %s-PreReadHeaderPlugin(%s)", plugin.Name(), rerr.Error())
+				Debugf("disconnected when reading: %s-PreReadHeaderPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -360,7 +360,7 @@ func (p *pluginContainer) PostReadPullHeader(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadPullHeaderPlugin); ok {
 			if rerr = _plugin.PostReadPullHeader(ctx); rerr != nil {
-				Errorf("%s-PostReadPullHeaderPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadPullHeaderPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -373,7 +373,7 @@ func (p *pluginContainer) PreReadPullBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreReadPullBodyPlugin); ok {
 			if rerr = _plugin.PreReadPullBody(ctx); rerr != nil {
-				Errorf("%s-PreReadPullBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PreReadPullBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -386,7 +386,7 @@ func (p *pluginContainer) PostReadPullBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadPullBodyPlugin); ok {
 			if rerr = _plugin.PostReadPullBody(ctx); rerr != nil {
-				Errorf("%s-PostReadPullBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadPullBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -399,7 +399,7 @@ func (p *pluginContainer) PostReadPushHeader(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadPushHeaderPlugin); ok {
 			if rerr = _plugin.PostReadPushHeader(ctx); rerr != nil {
-				Errorf("%s-PostReadPushHeaderPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadPushHeaderPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -412,7 +412,7 @@ func (p *pluginContainer) PreReadPushBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreReadPushBodyPlugin); ok {
 			if rerr = _plugin.PreReadPushBody(ctx); rerr != nil {
-				Errorf("%s-PreReadPushBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PreReadPushBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -425,7 +425,7 @@ func (p *pluginContainer) PostReadPushBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadPushBodyPlugin); ok {
 			if rerr = _plugin.PostReadPushBody(ctx); rerr != nil {
-				Errorf("%s-PostReadPushBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadPushBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -438,7 +438,7 @@ func (p *pluginContainer) PostReadReplyHeader(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadReplyHeaderPlugin); ok {
 			if rerr = _plugin.PostReadReplyHeader(ctx); rerr != nil {
-				Errorf("%s-PostReadReplyHeaderPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadReplyHeaderPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -451,7 +451,7 @@ func (p *pluginContainer) PreReadReplyBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PreReadReplyBodyPlugin); ok {
 			if rerr = _plugin.PreReadReplyBody(ctx); rerr != nil {
-				Errorf("%s-PreReadReplyBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PreReadReplyBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -464,7 +464,7 @@ func (p *pluginContainer) PostReadReplyBody(ctx ReadCtx) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostReadReplyBodyPlugin); ok {
 			if rerr = _plugin.PostReadReplyBody(ctx); rerr != nil {
-				Errorf("%s-PostReadReplyBodyPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostReadReplyBodyPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}
@@ -477,7 +477,7 @@ func (p *pluginContainer) PostDisconnect(sess PostSession) *Rerror {
 	for _, plugin := range p.plugins {
 		if _plugin, ok := plugin.(PostDisconnectPlugin); ok {
 			if rerr = _plugin.PostDisconnect(sess); rerr != nil {
-				Errorf("%s-PostDisconnectPlugin(%s)", plugin.Name(), rerr.Error())
+				Errorf("%s-PostDisconnectPlugin(%s)", plugin.Name(), rerr.String())
 				return rerr
 			}
 		}

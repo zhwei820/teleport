@@ -78,7 +78,7 @@ func (x *XferPipe) Append(filterId ...byte) error {
 }
 
 func (x *XferPipe) check() error {
-	if len(x.filters) > math.MaxUint8 {
+	if x.Len() > math.MaxUint8 {
 		return ErrXferPipeTooLong
 	}
 	return nil
@@ -86,12 +86,18 @@ func (x *XferPipe) check() error {
 
 // Len returns the length of transfer pipe.
 func (x *XferPipe) Len() int {
+	if x == nil {
+		return 0
+	}
 	return len(x.filters)
 }
 
 // Ids returns the id list of transfer filters.
 func (x *XferPipe) Ids() []byte {
-	var ids = make([]byte, len(x.filters))
+	var ids = make([]byte, x.Len())
+	if x.Len() == 0 {
+		return ids
+	}
 	for i, filter := range x.filters {
 		ids[i] = filter.Id()
 	}
@@ -101,7 +107,7 @@ func (x *XferPipe) Ids() []byte {
 // OnPack packs transfer byte stream, from inner-most to outer-most.
 func (x *XferPipe) OnPack(data []byte) ([]byte, error) {
 	var err error
-	for i := len(x.filters) - 1; i >= 0; i-- {
+	for i := x.Len() - 1; i >= 0; i-- {
 		if data, err = x.filters[i].OnPack(data); err != nil {
 			return data, err
 		}
@@ -112,8 +118,9 @@ func (x *XferPipe) OnPack(data []byte) ([]byte, error) {
 // OnUnpack unpacks transfer byte stream, from outer-most to inner-most.
 func (x *XferPipe) OnUnpack(data []byte) ([]byte, error) {
 	var err error
-	for _, filter := range x.filters {
-		if data, err = filter.OnUnpack(data); err != nil {
+	var count = x.Len()
+	for i := 0; i < count; i++ {
+		if data, err = x.filters[i].OnUnpack(data); err != nil {
 			return data, err
 		}
 	}

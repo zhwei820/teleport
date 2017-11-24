@@ -34,12 +34,12 @@ type CodecWriter struct {
 
 // Note: reseting the temporary buffer when return the *CodecWriter
 func (s *socket) getCodecWriter(bodyType byte, w io.Writer) (*CodecWriter, error) {
-	t, ok := s.codecWriterMap[codecName]
+	t, ok := s.codecWriterMap[codecId]
 	if ok {
 		t.Writer = w
 		return t, nil
 	}
-	c, err := codec.GetByName(codecName)
+	c, err := codec.GetByName(codecId)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (s *socket) getCodecWriter(bodyType byte, w io.Writer) (*CodecWriter, error
 		encMaker:      c.NewEncoder,
 	}
 	t.encMap = map[int]codec.Encoder{gzip.NoCompression: c.NewEncoder(t)}
-	s.codecWriterMap[codecName] = t
+	s.codecWriterMap[codecId] = t
 	return t, nil
 }
 

@@ -264,11 +264,10 @@ func (c *readHandleCtx) handle() {
 }
 
 func (c *readHandleCtx) bindPush(header *socket.Header) interface{} {
-	var err error
-	err = c.pluginContainer.PostReadPushHeader(c)
-	if err != nil {
+	if c.pluginContainer.PostReadPushHeader(c) != nil {
 		return nil
 	}
+	var err error
 	c.uri, err = url.Parse(header.Uri)
 	if err != nil {
 		return nil
@@ -284,8 +283,7 @@ func (c *readHandleCtx) bindPush(header *socket.Header) interface{} {
 	c.arg = reflect.New(c.apiType.argElem)
 	c.input.Body = c.arg.Interface()
 
-	err = c.pluginContainer.PreReadPushBody(c)
-	if err != nil {
+	if c.pluginContainer.PreReadPushBody(c) != nil {
 		return nil
 	}
 

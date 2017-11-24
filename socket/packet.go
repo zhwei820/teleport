@@ -28,6 +28,80 @@ import (
 	"github.com/henrylee2cn/teleport/xfer"
 )
 
+var packetStack = new(struct {
+	freePacket *Packet
+	mu         sync.Mutex
+})
+
+// GetPacket gets a *Packet form packet stack.
+// Note:
+//  NewBody is only for reading form connection;
+//  settings are only for writing to connection.
+func GetPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
+	packetStack.mu.Lock()
+	p := packetStack.freePacket
+	if p == nil {
+		p = NewPacket(NewBody)
+	} else {
+		packetStack.freePacket = p.next
+		p.Reset(NewBody, settings...)
+	}
+	packetStack.mu.Unlock()
+	return p
+}
+
+// GetSenderPacket returns a packet for sending.
+func GetSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
+	packet := GetPacket(nil, setting...)
+	packet.Header.Type = packetType
+	packet.Header.Uri = uri
+	packet.Body = body
+	return packet
+}
+
+// GetReceiverPacket returns a packet for sending.
+func GetReceiverPacket(NewBody NewBodyFunc) *Packet {
+	return GetPacket(NewBody)
+}
+
+// PutPacket puts a *Packet to packet stack.
+func PutPacket(p *Packet) {
+	packetStack.mu.Lock()
+	p.Body = nil
+	p.next = packetStack.freePacket
+	packetStack.freePacket = p
+	packetStack.mu.Unlock()
+}
+
+// NewPacket creates a new *Packet.
+// Note:
+//  NewBody is only for reading form connection;
+//  settings are only for writing to connection.
+func NewPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
+	var p = &Packet{
+		Header:  new(Header),
+		NewBody: NewBody,
+	}
+	for _, f := range settings {
+		f(p)
+	}
+	return p
+}
+
+// NewSenderPacket returns a packet for sending.
+func NewSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
+	packet := NewPacket(nil, setting...)
+	packet.Header.Type = packetType
+	packet.Header.Uri = uri
+	packet.Body = body
+	return packet
+}
+
+// NewReceiverPacket returns a packet for sending.
+func NewReceiverPacket(NewBody NewBodyFunc) *Packet {
+	return NewPacket(NewBody)
+}
+
 type (
 	// Packet a socket data packet.
 	Packet struct {
@@ -46,7 +120,7 @@ type (
 		NewBody NewBodyFunc `json:"-"`
 		// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
 		// Note: the length can not be bigger than 255!
-		XferPipe *xfer.XferPipe `json:"-"`
+		XferPipe xfer.XferPipe `json:"-"`
 		next     *Packet
 	}
 
@@ -114,81 +188,6 @@ func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
 		}
 		return nil
 	}
-}
-
-var packetStack = new(struct {
-	freePacket *Packet
-	mu         sync.Mutex
-})
-
-// GetPacket gets a *Packet form packet stack.
-// Note:
-//  NewBody is only for reading form connection;
-//  settings are only for writing to connection.
-func GetPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
-	packetStack.mu.Lock()
-	p := packetStack.freePacket
-	if p == nil {
-		p = NewPacket(NewBody)
-	} else {
-		packetStack.freePacket = p.next
-		p.Reset(NewBody, settings...)
-	}
-	packetStack.mu.Unlock()
-	return p
-}
-
-// GetSenderPacket returns a packet for sending.
-func GetSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
-	packet := GetPacket(nil, setting...)
-	packet.Header.Type = packetType
-	packet.Header.Uri = uri
-	packet.Body = body
-	return packet
-}
-
-// GetReceiverPacket returns a packet for sending.
-func GetReceiverPacket(NewBody NewBodyFunc) *Packet {
-	return GetPacket(NewBody)
-}
-
-// PutPacket puts a *Packet to packet stack.
-func PutPacket(p *Packet) {
-	packetStack.mu.Lock()
-	p.Body = nil
-	p.next = packetStack.freePacket
-	packetStack.freePacket = p
-	packetStack.mu.Unlock()
-}
-
-// NewPacket creates a new *Packet.
-// Note:
-//  NewBody is only for reading form connection;
-//  settings are only for writing to connection.
-func NewPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
-	var p = &Packet{
-		Header:   new(Header),
-		NewBody:  NewBody,
-		XferPipe: new(xfer.XferPipe),
-	}
-	for _, f := range settings {
-		f(p)
-	}
-	return p
-}
-
-// NewSenderPacket returns a packet for sending.
-func NewSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
-	packet := NewPacket(nil, setting...)
-	packet.Header.Type = packetType
-	packet.Header.Uri = uri
-	packet.Body = body
-	return packet
-}
-
-// NewReceiverPacket returns a packet for sending.
-func NewReceiverPacket(NewBody NewBodyFunc) *Packet {
-	return NewPacket(NewBody)
 }
 
 // Reset resets itself.

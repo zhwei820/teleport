@@ -81,7 +81,7 @@ type (
 		Pull(uri string, args interface{}, reply interface{}, setting ...socket.PacketSetting) *PullCmd
 		// Push sends a packet, but do not receives reply.
 		// If the args is []byte or *[]byte type, it can automatically fill in the body codec name.
-		Push(uri string, args interface{}, setting ...socket.PacketSetting) error
+		Push(uri string, args interface{}, setting ...socket.PacketSetting) *Rerror
 		// ReadTimeout returns readdeadline for underlying net.Conn.
 		ReadTimeout() time.Duration
 		// RemoteIp returns the remote peer ip.
@@ -278,18 +278,19 @@ func (s *session) GoPull(uri string, args interface{}, reply interface{}, done c
 			Errorf("panic:\n%v\n%s", p, goutil.PanicTrace(1))
 		}
 	}()
-	var err error
 	s.pullCmdMap.Store(output.Header.Seq, cmd)
-	err = s.peer.pluginContainer.PreWritePull(cmd)
-	if err == nil {
-		if err = s.write(output); err == nil {
-			s.peer.pluginContainer.PostWritePull(cmd)
-			return
-		}
+	cmd.rerr = s.peer.pluginContainer.PreWritePull(cmd)
+	if cmd.rerr != nil {
+		cmd.done()
+		return
 	}
-	cmd.rerr = rerror_writeFailed.Copy()
-	cmd.rerr.Detail = err.Error()
-	cmd.done()
+	if err := s.write(output); err != nil {
+		cmd.rerr = rerror_writeFailed.Copy()
+		cmd.rerr.Detail = err.Error()
+		cmd.done()
+		return
+	}
+	s.peer.pluginContainer.PostWritePull(cmd)
 }
 
 // Pull sends a packet and receives reply.
@@ -304,7 +305,7 @@ func (s *session) Pull(uri string, args interface{}, reply interface{}, setting 
 
 // Push sends a packet, but do not receives reply.
 // If the args is []byte or *[]byte type, it can automatically fill in the body codec name.
-func (s *session) Push(uri string, args interface{}, setting ...socket.PacketSetting) error {
+func (s *session) Push(uri string, args interface{}, setting ...socket.PacketSetting) *Rerror {
 	start := s.peer.timeNow()
 
 	s.pushSeqLock.Lock()
@@ -334,15 +335,18 @@ func (s *session) Push(uri string, args interface{}, setting ...socket.PacketSet
 		}
 		s.peer.putContext(ctx, true)
 	}()
-	var err error
-	err = s.peer.pluginContainer.PreWritePush(ctx)
-	if err == nil {
-		if err = s.write(output); err == nil {
-			s.runlog(s.peer.timeSince(ctx.start), nil, output, typePushLaunch)
-			s.peer.pluginContainer.PostWritePush(ctx)
-		}
+	rerr := s.peer.pluginContainer.PreWritePush(ctx)
+	if rerr != nil {
+		return rerr
 	}
-	return err
+	if err := s.write(output); err != nil {
+		rerr = rerror_writeFailed.Copy()
+		rerr.Detail = err.Error()
+		return rerr
+	}
+	s.runlog(s.peer.timeSince(ctx.start), nil, output, typePushLaunch)
+	s.peer.pluginContainer.PostWritePush(ctx)
+	return nil
 }
 
 // Public returns temporary public data of session(socket).
@@ -371,10 +375,8 @@ func (s *session) startReadAndHandle() {
 	// read pull, pull reple or push
 	for s.IsOk() {
 		var ctx = s.peer.getContext(s, false)
-		err = s.peer.pluginContainer.PreReadHeader(ctx)
-		if err != nil {
+		if s.peer.pluginContainer.PreReadHeader(ctx) != nil {
 			s.peer.putContext(ctx, false)
-			err = nil
 			return
 		}
 

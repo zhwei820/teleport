@@ -124,19 +124,21 @@ func (p *Peer) ServeConn(conn net.Conn, protoFunc ...socket.ProtoFunc) Session {
 }
 
 // Dial connects with the peer of the destination address.
-func (p *Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, error) {
+func (p *Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, *Rerror) {
 	var conn, err = net.DialTimeout("tcp", addr, p.defaultDialTimeout)
 	if err != nil {
-		return nil, err
+		rerr := rerror_dialFailed.Copy()
+		rerr.Detail = err.Error()
+		return nil, rerr
 	}
 	if p.tlsConfig != nil {
 		conn = tls.Client(conn, p.tlsConfig)
 	}
 	var sess = newSession(p, conn, protoFunc)
 	sess.socket.SetId(sess.LocalIp())
-	if err = p.pluginContainer.PostDial(sess); err != nil {
+	if rerr := p.pluginContainer.PostDial(sess); rerr != nil {
 		sess.Close()
-		return nil, err
+		return nil, rerr
 	}
 	Go(sess.startReadAndHandle)
 	p.sessHub.Set(sess)
@@ -146,20 +148,22 @@ func (p *Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, error)
 
 // DialContext connects with the peer of the destination address,
 // using the provided context.
-func (p *Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, error) {
+func (p *Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, *Rerror) {
 	var d net.Dialer
 	var conn, err = d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, err
+		rerr := rerror_dialFailed.Copy()
+		rerr.Detail = err.Error()
+		return nil, rerr
 	}
 	if p.tlsConfig != nil {
 		conn = tls.Client(conn, p.tlsConfig)
 	}
 	var sess = newSession(p, conn, protoFunc)
 	sess.socket.SetId(sess.LocalIp())
-	if err = p.pluginContainer.PostDial(sess); err != nil {
+	if rerr := p.pluginContainer.PostDial(sess); rerr != nil {
 		sess.Close()
-		return nil, err
+		return nil, rerr
 	}
 	Go(sess.startReadAndHandle)
 	p.sessHub.Set(sess)

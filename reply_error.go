@@ -28,7 +28,7 @@ const MetaRerrorKey = "X-Reply-Error"
 var (
 	_ json.Marshaler   = new(Rerror)
 	_ json.Unmarshaler = new(Rerror)
-	_ error            = new(Rerror)
+	// _ error            = new(Rerror)
 
 	re_a = []byte(`{"code":`)
 	re_b = []byte(`,"message":"`)
@@ -58,8 +58,8 @@ func NewRerrorFromMeta(header *socket.Header) *Rerror {
 	return r
 }
 
-// Error implements error interface
-func (r *Rerror) Error() string {
+// String prints error info.
+func (r *Rerror) String() string {
 	b, _ := r.MarshalJSON()
 	return goutil.BytesToString(b)
 }
@@ -71,7 +71,7 @@ func (r Rerror) Copy() *Rerror {
 
 // SetToMeta sets self to header 'X-Reply-Error' metadata.
 func (r *Rerror) SetToMeta(header *socket.Header) {
-	errStr := r.Error()
+	errStr := r.String()
 	if len(errStr) == 0 {
 		return
 	}
