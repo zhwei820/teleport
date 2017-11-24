@@ -15,6 +15,7 @@ A concise, powerful and high-performance TCP connection socket.
 - Provides `Socket Hub`, `Socket` pool and `*Packet` stack
 - Support setting the size of the reading packet (if exceed disconnect it)
 
+
 ## Benchmark
 
 - Test server configuration
@@ -40,8 +41,8 @@ darwin amd64 4CPU 8GB
 - **Packet:** The corresponding structure of the data package
 - **Proto:** The protocol interface of packet pack/unpack 
 - **Codec:** Serialization interface for `Packet.Body`
-- **XferPipe:** A series of pipelines to handle packet data before transmission
-- **XferFilter:** A interface to handle packet data before transmission
+- **XferPipe:** A series of pipelines to handle packet data before transfer
+- **XferFilter:** A interface to handle packet data before transfer
 
 
 ## Packet

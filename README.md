@@ -64,8 +64,8 @@ go get -u github.com/henrylee2cn/teleport
 - **Packet:** The corresponding structure of the data package
 - **Proto:** The protocol interface of packet pack/unpack 
 - **Codec:** Serialization interface for `Packet.Body`
-- **XferPipe:** A series of pipelines to handle packet data before transmission
-- **XferFilter:** A interface to handle packet data before transmission
+- **XferPipe:** A series of pipelines to handle packet data before transfer
+- **XferFilter:** A interface to handle packet data before transfer
 
 ### 4.2 Execution level
 
