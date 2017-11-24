@@ -50,6 +50,7 @@ go get -u github.com/henrylee2cn/teleport
 - 底层连接使用I/O缓冲区
 - 端点间通信使用I/O多路复用技术
 - 支持设置读取包的大小限制（如果超出则断开连接）
+- 提供Hander的上下文
 
 ## 4. 架构
 

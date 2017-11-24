@@ -48,6 +48,7 @@ go get -u github.com/henrylee2cn/teleport
 - With a connection I/O buffer
 - Use I/O multiplexing technology
 - Support setting the size of the reading packet (if exceed disconnect it)
+- Provide the context of the handler
 
 ## 4. Architecture
 

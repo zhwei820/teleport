@@ -149,6 +149,7 @@ func newSocket(c net.Conn, protoFuncs []ProtoFunc) *socket {
 		protocol: getProto(protoFuncs, c),
 		Conn:     c,
 	}
+	s.optimize()
 	return s
 }
 
@@ -234,6 +235,7 @@ func (s *socket) Reset(netConn net.Conn, protoFunc ...ProtoFunc) {
 	s.SetId("")
 	s.protocol = getProto(protoFunc, netConn)
 	atomic.StoreInt32(&s.curState, normal)
+	s.optimize()
 	s.mu.Unlock()
 }
 
@@ -277,4 +279,54 @@ func getProto(protoFuncs []ProtoFunc, rw io.ReadWriter) Proto {
 	} else {
 		return defaultProtoFunc(rw)
 	}
+}
+
+type (
+	ifaceSetKeepAlive interface {
+		SetKeepAlive(keepalive bool) error
+		SetKeepAlivePeriod(d time.Duration) error
+	}
+	ifaceSetBuffer interface {
+		// SetReadBuffer sets the size of the operating system's
+		// receive buffer associated with the connection.
+		SetReadBuffer(bytes int) error
+		// SetWriteBuffer sets the size of the operating system's
+		// transmit buffer associated with the connection.
+		SetWriteBuffer(bytes int) error
+	}
+)
+
+func (s *socket) optimize() {
+	if c, ok := s.Conn.(ifaceSetKeepAlive); ok {
+		c.SetKeepAlive(true)
+		c.SetKeepAlivePeriod(3 * time.Minute)
+	}
+	if c, ok := s.Conn.(ifaceSetBuffer); ok {
+		if tcpReadBuffer >= 0 {
+			c.SetReadBuffer(tcpReadBuffer)
+		}
+		if tcpWriteBuffer >= 0 {
+			c.SetWriteBuffer(tcpWriteBuffer)
+		}
+	}
+}
+
+var (
+	tcpWriteBuffer = -1
+	// tcpReadBuffer  = 0
+	tcpReadBuffer = 1024 * 35
+)
+
+// SetReadBuffer sets the size of the operating system's
+// receive buffer associated with the *net.TCP connection.
+// Note: Uses the default value, if bytes=1.
+func SetTCPReadBuffer(bytes int) {
+	tcpReadBuffer = bytes
+}
+
+// SetWriteBuffer sets the size of the operating system's
+// transmit buffer associated with the *net.TCP connection.
+// Note: Uses the default value, if bytes=1.
+func SetTCPWriteBuffer(bytes int) {
+	tcpWriteBuffer = bytes
 }

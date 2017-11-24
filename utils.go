@@ -86,6 +86,18 @@ func Go(fn func()) bool {
 	return true
 }
 
+// SetReadBuffer sets the size of the operating system's
+// receive buffer associated with the *net.TCP connection.
+// Note: Uses the default value, if bytes=1.
+//  func SetTCPReadBuffer(bytes int)
+var SetTCPReadBuffer = socket.SetTCPReadBuffer
+
+// SetWriteBuffer sets the size of the operating system's
+// transmit buffer associated with the *net.TCP connection.
+// Note: Uses the default value, if bytes=1.
+//  func SetTCPWriteBuffer(bytes int)
+var SetTCPWriteBuffer = socket.SetTCPWriteBuffer
+
 func newTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	var tlsConfig *tls.Config
 	if len(certFile) > 0 && len(keyFile) > 0 {

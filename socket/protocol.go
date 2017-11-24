@@ -57,7 +57,7 @@ type (
 	FastProto struct {
 		id   byte
 		name string
-		r    *bufio.Reader
+		r    io.Reader
 		w    io.Writer
 		rMu  sync.Mutex
 	}
@@ -69,7 +69,7 @@ var (
 		return &FastProto{
 			id:   'f',
 			name: "fast",
-			r:    bufio.NewReader(rw),
+			r:    bufio.NewReaderSize(rw, 8688),
 			w:    rw,
 		}
 	}

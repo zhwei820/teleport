@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/henrylee2cn/goutil"
+	"github.com/henrylee2cn/goutil/coarsetime"
 	"github.com/henrylee2cn/goutil/errors"
 	"github.com/henrylee2cn/teleport/codec"
 	"github.com/henrylee2cn/teleport/socket"
@@ -209,8 +210,10 @@ func (p *Peer) listen(addr string, protoFuncs []socket.ProtoFunc) error {
 	Printf("listen ok (addr: %s)", addr)
 
 	var (
-		tempDelay time.Duration // how long to sleep on accept failure
-		closeCh   = p.closeCh
+		tempDelay           time.Duration // how long to sleep on accept failure
+		closeCh             = p.closeCh
+		defaultReadTimeout  = time.Duration(p.defaultReadTimeout)
+		defaultWriteTimeout = time.Duration(p.defaultWriteTimeout)
 	)
 	for {
 		rw, e := lis.Accept()
@@ -239,9 +242,23 @@ func (p *Peer) listen(addr string, protoFuncs []socket.ProtoFunc) error {
 		}
 		tempDelay = 0
 
-		func(sess *session) {
+		func(conn net.Conn) {
 		TRYGO:
 			if !Go(func() {
+				if c, ok := conn.(*tls.Conn); ok {
+					if defaultReadTimeout > 0 {
+						c.SetReadDeadline(coarsetime.CeilingTimeNow().Add(defaultReadTimeout))
+					}
+					if defaultWriteTimeout > 0 {
+						c.SetReadDeadline(coarsetime.CeilingTimeNow().Add(defaultWriteTimeout))
+					}
+					if err := c.Handshake(); err != nil {
+						Errorf("TLS handshake error from %s: %s", c.RemoteAddr(), err.Error())
+						return
+					}
+				}
+
+				var sess = newSession(p, conn, protoFuncs)
 				if err := p.pluginContainer.PostAccept(sess); err != nil {
 					sess.Close()
 					return
@@ -253,7 +270,7 @@ func (p *Peer) listen(addr string, protoFuncs []socket.ProtoFunc) error {
 				time.Sleep(time.Second)
 				goto TRYGO
 			}
-		}(newSession(p, rw, protoFuncs))
+		}(rw)
 	}
 }
 
