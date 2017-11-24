@@ -34,10 +34,10 @@ go get -u github.com/henrylee2cn/teleport
 ## 3. Feature
 
 - Server and client are peer-to-peer, have the same API method
+- Support custom communication protocol
+- Support set the size of socket I/O buffer
 - Packet contains both Header and Body two parts
 - Support for customizing head and body coding types separately, e.g `JSON` `Protobuf` `string`
-- Support custom communication protocol
-- Body supports gzip compression
 - Header contains the status code and its description text
 - Support push, pull, reply and other means of communication
 - Support plug-in mechanism, can customize authentication, heartbeat, micro service registration center, statistics, etc.
@@ -45,7 +45,6 @@ go get -u github.com/henrylee2cn/teleport
 - Support reverse proxy
 - Detailed log information, support print input and output details
 - Supports setting slow operation alarm threshold
-- With a connection I/O buffer
 - Use I/O multiplexing technology
 - Support setting the size of the reading packet (if exceed disconnect it)
 - Provide the context of the handler
@@ -62,7 +61,11 @@ go get -u github.com/henrylee2cn/teleport
 - **Push-Launch:** Push data to the peer
 - **Push-Handle:** Handle the push of peer
 - **Router:** Register handlers
-
+- **Packet:** The corresponding structure of the data package
+- **Proto:** The protocol interface of packet pack/unpack 
+- **Codec:** Serialization interface for `Packet.Body`
+- **XferPipe:** A series of pipelines to handle packet data before transmission
+- **XferFilter:** A interface to handle packet data before transmission
 
 ### 4.2 Execution level
 
@@ -114,58 +117,34 @@ type Header struct {
 
 ### 4.4 Protocol
 
-The default socket communication protocol:
-
-```
-HeaderLength | HeaderCodecId | Header | BodyLength | BodyTypeId | Body
-```
-
-**Notes:**
-
-- `HeaderLength`: uint32, 4 bytes, big endian
-- `HeaderCodecId`: uint8, 1 byte
-- `Header`: header bytes
-- `BodyLength`: uint32, 4 bytes, big endian
-	* may be 0, meaning that the `Body` is empty and does not indicate the `BodyTypeId`
-	* may be 1, meaning that the `Body` is empty but indicates the `BodyTypeId`
-- `BodyTypeId`: uint8, 1 byte
-- `Body`: body bytes
-
 You can customize your own communication protocol by implementing the interface:
 
 ```go
-// Protocol socket communication protocol
-type Protocol interface {
-	// WritePacket writes header and body to the connection.
-	WritePacket(
-		packet *Packet,
-		destWriter *utils.BufioWriter,
-		codecWriterMaker func(bodyType byte, w io.Writer) (*CodecWriter, error),
-		isActiveClosed func() bool,
-	) error
-
-	// ReadPacket reads header and body from the connection.
-	ReadPacket(
-		packet *Packet,
-		bodyAdapter func() interface{},
-		srcReader *utils.BufioReader,
-		codecReaderMaker func(codecId byte) (*CodecReader, error),
-		isActiveClosed func() bool,
-		checkReadLimit func(int64) error,
-	) error
-}
+type (
+	// Proto pack/unpack protocol scheme of socket packet.
+	Proto interface {
+		// Version returns the protocol's id and name.
+		Version() (byte, string)
+		// Pack pack socket data packet.
+		// Note: Make sure to write only once or there will be package contamination!
+		Pack(*Packet) error
+		// Unpack unpack socket data packet.
+		// Note: Concurrent unsafe!
+		Unpack(*Packet) error
+	}
+	ProtoFunc func(io.ReadWriter) Proto
+)
 ```
 
 Next, you can specify the communication protocol in the following ways:
 
 ```go
-func SetDefaultProtocol(socket.Protocol)
+func SetDefaultProtoFunc(socket.ProtoFunc)
 func (*Peer) ServeConn(conn net.Conn, protoFunc ...socket.ProtoFunc) Session
-func (*Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, error)
-func (*Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, error)
+func (*Peer) DialContext(ctx context.Context, addr string, protoFunc ...socket.ProtoFunc) (Session, *Rerror)
+func (*Peer) Dial(addr string, protoFunc ...socket.ProtoFunc) (Session, *Rerror)
 func (*Peer) Listen(protoFunc ...socket.ProtoFunc) error
 ```
-
 
 ## 5. Usage
 
@@ -173,16 +152,14 @@ func (*Peer) Listen(protoFunc ...socket.ProtoFunc) error
 
 ```go
 var cfg = &tp.PeerConfig{
-	DefaultReadTimeout:   time.Minute * 3,
-	DefaultWriteTimeout:  time.Minute * 3,
-	TlsCertFile:          "",
-	TlsKeyFile:           "",
-	SlowCometDuration:    time.Millisecond * 500,
-	DefaultHeaderCodec:   "protobuf",
+	DefaultReadTimeout:  time.Minute * 5,
+	DefaultWriteTimeout: time.Millisecond * 500,
+	TlsCertFile:         "",
+	TlsKeyFile:          "",
+	SlowCometDuration:   time.Millisecond * 500,
 	DefaultBodyType:     "json",
-	DefaultBodyGzipLevel: 5,
-	PrintBody:            true,
-	DefaultDialTimeout:   time.Second * 10,
+	PrintBody:           true,
+	CountTime:           true,
 	ListenAddrs: []string{
 		"0.0.0.0:9090",
 	},
@@ -194,7 +171,7 @@ var peer = tp.NewPeer(cfg)
 // It can be used as a server
 peer.Listen()
 
-// It can also be used as a client at the same time
+// Also, it can also be used as a client at the same time
 var sess, err = peer.Dial("127.0.0.1:8080")
 if err != nil {
 	tp.Panicf("%v", err)
@@ -321,6 +298,7 @@ aliasesPlugin.Alias("/alias", "/origin")
 package main
 
 import (
+	"encoding/json"
 	"time"
 
 	tp "github.com/henrylee2cn/teleport"
@@ -328,17 +306,17 @@ import (
 
 func main() {
 	go tp.GraceSignal()
+	// tp.SetReadLimit(10)
 	tp.SetShutdown(time.Second*20, nil, nil)
 	var cfg = &tp.PeerConfig{
-		DefaultReadTimeout:   time.Minute * 3,
-		DefaultWriteTimeout:  time.Minute * 3,
-		TlsCertFile:          "",
-		TlsKeyFile:           "",
-		SlowCometDuration:    time.Millisecond * 500,
-		DefaultHeaderCodec:   "protobuf",
+		DefaultReadTimeout:  time.Minute * 5,
+		DefaultWriteTimeout: time.Millisecond * 500,
+		TlsCertFile:         "",
+		TlsKeyFile:          "",
+		SlowCometDuration:   time.Millisecond * 500,
 		DefaultBodyType:     "json",
-		DefaultBodyGzipLevel: 5,
-		PrintBody:            true,
+		PrintBody:           true,
+		CountTime:           true,
 		ListenAddrs: []string{
 			"0.0.0.0:9090",
 			"0.0.0.0:9091",
@@ -370,13 +348,20 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, *tp.R
 	}, nil
 }
 
-func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, *tp.Rerror) {
-	var v interface{}
-	codecId, err := ctx.Unmarshal(*body, &v, true)
+func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, *tp.Rerror) {
+	time.Sleep(1)
+	var v = struct {
+		ConnPort int
+		json.RawMessage
+		Bytes []byte
+	}{}
+	codecId, err := ctx.Bind(&v)
 	if err != nil {
-		return nil, tp.New*Rerror(0, err.Error())
+		return nil, tp.NewRerror(1001, "bind error", err.Error())
 	}
-	tp.Debugf("unmarshal body: codec: %s, content: %#v", codecId, v)
+	tp.Debugf("UnknownPullHandle: codec: %s, conn_port: %d, RawMessage: %s, bytes: %s",
+		codecId, v.ConnPort, v.RawMessage, v.Bytes,
+	)
 	return []string{"a", "aa", "aaa"}, nil
 }
 ```
@@ -387,6 +372,7 @@ func UnknownPullHandle(ctx tp.UnknownPullCtx, body *[]byte) (interface{}, *tp.Re
 package main
 
 import (
+	"encoding/json"
 	"time"
 
 	tp "github.com/henrylee2cn/teleport"
@@ -396,35 +382,38 @@ func main() {
 	go tp.GraceSignal()
 	tp.SetShutdown(time.Second*20, nil, nil)
 	var cfg = &tp.PeerConfig{
-		DefaultReadTimeout:   time.Minute * 3,
-		DefaultWriteTimeout:  time.Minute * 3,
-		TlsCertFile:          "",
-		TlsKeyFile:           "",
-		SlowCometDuration:    time.Millisecond * 500,
-		DefaultHeaderCodec:   "protobuf",
+		DefaultReadTimeout:  time.Minute * 5,
+		DefaultWriteTimeout: time.Millisecond * 500,
+		TlsCertFile:         "",
+		TlsKeyFile:          "",
+		SlowCometDuration:   time.Millisecond * 500,
 		DefaultBodyType:     "json",
-		DefaultBodyGzipLevel: 5,
-		PrintBody:            false,
+		PrintBody:           true,
+		CountTime:           true,
 	}
 
 	var peer = tp.NewPeer(cfg)
+	defer peer.Close()
 	peer.PushRouter.Reg(new(Push))
 
 	{
 		var sess, err = peer.Dial("127.0.0.1:9090")
 		if err != nil {
-			tp.Panicf("%v", err)
+			tp.Fatalf("%v", err)
 		}
 
 		var reply interface{}
 		var pullcmd = sess.Pull(
 			"/group/home/test?peer_id=client9090",
-			map[string]interface{}{"conn_port": 9090},
+			map[string]interface{}{
+				"conn_port": 9090,
+				"bytes":     []byte("bytestest9090"),
+			},
 			&reply,
 		)
 
 		if pullcmd.Rerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.Rerror().Error())
+			tp.Fatalf("pull error: %v", pullcmd.Rerror())
 		}
 		tp.Infof("9090reply: %#v", reply)
 	}
@@ -438,12 +427,20 @@ func main() {
 		var reply interface{}
 		var pullcmd = sess.Pull(
 			"/group/home/test_unknown?peer_id=client9091",
-			map[string]interface{}{"conn_port": 9091},
+			struct {
+				ConnPort int
+				json.RawMessage
+				Bytes []byte
+			}{
+				9091,
+				json.RawMessage(`{"RawMessage":"test9091"}`),
+				[]byte("bytes-test"),
+			},
 			&reply,
 		)
 
 		if pullcmd.Rerror() != nil {
-			tp.Fatalf("pull error: %v", pullcmd.Rerror().Error())
+			tp.Fatalf("pull error: %v", pullcmd.Rerror())
 		}
 		tp.Infof("9091reply test_unknown: %#v", reply)
 	}

@@ -5,7 +5,7 @@ A concise, powerful and high-performance TCP connection socket.
 ## Feature
 
 - The server and client are peer-to-peer interfaces
-- Optimize I/O buffer
+- Support set the size of socket I/O buffer
 - Support custom communication protocol
 - Support custom transfer filter pipe (Such as gzip, encrypt, verify...)
 - Packet contains both Header and Body
@@ -34,6 +34,14 @@ darwin amd64 4CPU 8GB
 ![rpcx_benchmark](https://github.com/henrylee2cn/teleport/raw/develop/doc/rpcx_benchmark.jpg)
 
 **[test code](https://github.com/henrylee2cn/rpc-benchmark/tree/master/rpcx)**
+
+## Keyworks
+
+- **Packet:** The corresponding structure of the data package
+- **Proto:** The protocol interface of packet pack/unpack 
+- **Codec:** Serialization interface for `Packet.Body`
+- **XferPipe:** A series of pipelines to handle packet data before transmission
+- **XferFilter:** A interface to handle packet data before transmission
 
 
 ## Packet
