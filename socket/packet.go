@@ -228,6 +228,13 @@ func WithBodyType(codecId byte) PacketSetting {
 	}
 }
 
+// WithXferPipe sets transfer filter pipe.
+func WithXferPipe(filterId ...byte) PacketSetting {
+	return func(p *Packet) {
+		p.XferPipe.Append(filterId...)
+	}
+}
+
 var (
 	defaultBodyType codec.Codec
 )

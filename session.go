@@ -401,10 +401,10 @@ func (s *session) startReadAndHandle() {
 		s.graceCtxWaitGroup.Add(1)
 		if !Go(func() {
 			defer func() {
+				s.peer.putContext(ctx, true)
 				if p := recover(); p != nil {
 					Debugf("panic:\n%v\n%s", p, goutil.PanicTrace(1))
 				}
-				s.peer.putContext(ctx, true)
 			}()
 			ctx.handle()
 		}) {
@@ -436,10 +436,10 @@ func (s *session) write(packet *socket.Packet) (err error) {
 	}
 
 	defer func() {
+		s.writeLock.Unlock()
 		if err == io.EOF || err == socket.ErrProactivelyCloseSocket {
 			err = ErrConnClosed
 		}
-		s.writeLock.Unlock()
 	}()
 
 	if writeTimeout > 0 {

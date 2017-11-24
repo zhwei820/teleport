@@ -39,12 +39,8 @@ type (
 		Ip() string
 		Peer() *Peer
 		Session() Session
-	}
-	UnknownPushCtx interface {
-		PushCtx
-		InputHeader() *socket.Header
-		InputBodyBytes() []byte
-		Bind(v interface{}) (bodyType byte, err error)
+		GetBodyType() byte
+		GetMeta(key string) []byte
 	}
 	// PullCtx request handler context.
 	// For example:
@@ -52,10 +48,18 @@ type (
 	PullCtx interface {
 		PushCtx
 		SetBodyType(byte)
+		SetMeta(key, value string)
+		SetXferPipe(filterId ...byte)
+	}
+	UnknownPushCtx interface {
+		PushCtx
+		InputHeader() *socket.Header
+		InputBodyBytes() []byte
+		Bind(v interface{}) (bodyType byte, err error)
 	}
 	UnknownPullCtx interface {
 		UnknownPushCtx
-		SetBodyType(byte)
+		SetXferPipe(filterId ...byte)
 	}
 	// WriteCtx for writing packet.
 	WriteCtx interface {
@@ -199,9 +203,29 @@ func (c *readHandleCtx) Query() url.Values {
 	return c.query
 }
 
-// SetBodyType sets the body codec for response packet.
+// GetMeta gets the header metadata for the input packet.
+func (c *readHandleCtx) GetMeta(key string) []byte {
+	return c.input.Header.Meta.Peek(key)
+}
+
+// SetMeta sets the header metadata for reply packet.
+func (c *readHandleCtx) SetMeta(key, value string) {
+	c.output.Header.Meta.Set(key, value)
+}
+
+// GetBodyType gets the body codec type of the input packet.
+func (c *readHandleCtx) GetBodyType() byte {
+	return c.input.BodyType
+}
+
+// SetBodyType sets the body codec for reply packet.
 func (c *readHandleCtx) SetBodyType(bodyType byte) {
 	c.output.BodyType = bodyType
+}
+
+// SetXferPipe sets transfer filter pipe of reply packet.
+func (c *readHandleCtx) SetXferPipe(filterId ...byte) {
+	c.output.XferPipe.Append(filterId...)
 }
 
 // Ip returns the remote addr.
@@ -211,12 +235,6 @@ func (c *readHandleCtx) Ip() string {
 
 // Be executed synchronously when reading packet
 func (c *readHandleCtx) binding(header *socket.Header) (body interface{}) {
-	defer func() {
-		if p := recover(); p != nil {
-			Errorf("panic:\n%v\n%s", p, goutil.PanicTrace(1))
-			body = nil
-		}
-	}()
 	c.start = c.Peer().timeNow()
 	c.pluginContainer = c.sess.peer.pluginContainer
 	switch header.Type {
