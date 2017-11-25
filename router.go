@@ -117,11 +117,11 @@ func (r *Router) SetUnknown(unknownHandler interface{}, plugin ...Plugin) {
 		h.unknownHandleFunc = func(ctx *readHandleCtx) {
 			body, rerr := fn(ctx)
 			if rerr != nil {
-				rerr.SetToMeta(ctx.output.Header)
+				rerr.SetToMeta(ctx.output.Meta())
 			} else if body != nil {
-				ctx.output.Body = body
-				if ctx.output.BodyType == codec.NilCodecId {
-					ctx.output.BodyType = ctx.input.BodyType
+				ctx.output.SetBody(body)
+				if ctx.output.BodyCodec() == codec.NilCodecId {
+					ctx.output.SetBodyCodec(ctx.input.BodyCodec())
 				}
 			}
 		}
@@ -134,8 +134,8 @@ func (r *Router) SetUnknown(unknownHandler interface{}, plugin ...Plugin) {
 		}
 		h.unknownHandleFunc = func(ctx *readHandleCtx) {
 			fn(ctx)
-			if ctx.output.BodyType == codec.NilCodecId {
-				ctx.output.BodyType = ctx.input.BodyType
+			if ctx.output.BodyCodec() == codec.NilCodecId {
+				ctx.output.SetBodyCodec(ctx.input.BodyCodec())
 			}
 		}
 	}
@@ -264,13 +264,13 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 			obj := pool.Get().(*PullCtrlValue)
 			*obj.ctxPtr = ctx
 			rets := methodFunc.Call([]reflect.Value{obj.ctrl, argValue})
-			ctx.output.Body = rets[0].Interface()
+			ctx.output.SetBody(rets[0].Interface())
 			rerr, _ := rets[1].Interface().(*Rerror)
 			if rerr != nil {
-				rerr.SetToMeta(ctx.output.Header)
+				rerr.SetToMeta(ctx.output.Meta())
 
-			} else if ctx.output.Body != nil && ctx.output.BodyType == codec.NilCodecId {
-				ctx.output.BodyType = ctx.input.BodyType
+			} else if ctx.output.Body() != nil && ctx.output.BodyCodec() == codec.NilCodecId {
+				ctx.output.SetBodyCodec(ctx.input.BodyCodec())
 			}
 			pool.Put(obj)
 		}

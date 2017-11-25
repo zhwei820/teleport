@@ -32,7 +32,7 @@ type PeerConfig struct {
 	DefaultReadTimeout  time.Duration `yaml:"default_read_timeout"    ini:"default_read_timeout"    comment:"Default maximum duration for reading; ns,µs,ms,s,m,h"`
 	DefaultWriteTimeout time.Duration `yaml:"default_write_timeout"   ini:"default_write_timeout"   comment:"Default maximum duration for writing; ns,µs,ms,s,m,h"`
 	SlowCometDuration   time.Duration `yaml:"slow_comet_duration"     ini:"slow_comet_duration"     comment:"Slow operation alarm threshold; ns,µs,ms,s ..."`
-	DefaultBodyType     string        `yaml:"default_body_type"        ini:"default_body_type"      comment:"Default body codec type"`
+	DefaultBodyCodec    string        `yaml:"default_body_codec"      ini:"default_body_codec"      comment:"Default body codec type id"`
 	PrintBody           bool          `yaml:"print_body"              ini:"print_body"              comment:"Is print body or not"`
 	CountTime           bool          `yaml:"count_time"              ini:"count_time"              comment:"Is count cost time or not"`
 	DefaultDialTimeout  time.Duration `yaml:"default_dial_timeout"    ini:"default_dial_timeout"    comment:"Default maximum duration for dialing; for client role; ns,µs,ms,s,m,h"`
@@ -45,10 +45,10 @@ func (p *PeerConfig) Reload(bind cfgo.BindFunc) error {
 	return bind()
 }
 
-// SetDefaultBodyType set the default header codec.
+// SetDefaultBodyCodec set the default header codec.
 // Note:
 //  If the codec.Codec named 'codecId' is not registered, it will panic;
 //  It is not safe to call it concurrently.
-func SetGlobalBodyType(codecId byte) {
-	socket.SetDefaultBodyType(codecId)
+func SetGlobalBodyCodec(codecId byte) {
+	socket.SetDefaultBodyCodec(codecId)
 }

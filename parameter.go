@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/henrylee2cn/goutil"
-	"github.com/henrylee2cn/teleport/socket"
+	"github.com/henrylee2cn/teleport/utils"
 )
 
 // Packet types
@@ -90,9 +90,9 @@ var (
 
 type metaSetting string
 
-func (m metaSetting) Inject(header *socket.Header, detail ...string) {
+func (m metaSetting) Inject(meta *utils.Args, detail ...string) {
 	if len(detail) > 0 {
 		m = m[:len(m)-2] + metaSetting(bytes.Replace(goutil.StringToBytes(detail[0]), re_d, re_e, -1)) + m[len(m)-2:]
 	}
-	header.Meta.Set(MetaRerrorKey, *(*string)(unsafe.Pointer(&m)))
+	meta.Set(MetaRerrorKey, *(*string)(unsafe.Pointer(&m)))
 }

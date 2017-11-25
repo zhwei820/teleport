@@ -25,25 +25,24 @@ import (
 	"github.com/henrylee2cn/teleport/socket"
 )
 
-// GetSenderPacket returns a packet for sending.
-//  func GetSenderPacket(typ int32, uri string, body interface{}, setting ...socket.PacketSetting) *socket.Packet
-var GetSenderPacket = socket.GetSenderPacket
-
-// GetReceiverPacket returns a packet for sending.
-//  func GetReceiverPacket(bodyGetting func(*socket.Header) interface{}) *socket.Packet
-var GetReceiverPacket = socket.GetReceiverPacket
-
-// DefaultProtoFunc gets the default builder of socket communication protocol
-//  func DefaultProtoFunc() ProtoFunc
-var DefaultProtoFunc = socket.DefaultProtoFunc
-
-// SetDefaultProtoFunc sets the default builder of socket communication protocol
-//  func SetDefaultProtoFunc(protoFunc ProtoFunc)
-var SetDefaultProtoFunc = socket.SetDefaultProtoFunc
+// GetPacket gets a *Packet form packet stack.
+// Note:
+//  newBodyFunc is only for reading form connection;
+//  settings are only for writing to connection.
+//  func GetPacket(settings ...socket.PacketSetting) *socket.Packet
+var GetPacket = socket.GetPacket
 
 // PutPacket puts a *socket.Packet to packet stack.
 //  func PutPacket(p *socket.Packet)
 var PutPacket = socket.PutPacket
+
+// DefaultProtoFunc gets the default builder of socket communication protocol
+//  func DefaultProtoFunc() socket.ProtoFunc
+var DefaultProtoFunc = socket.DefaultProtoFunc
+
+// SetDefaultProtoFunc sets the default builder of socket communication protocol
+//  func SetDefaultProtoFunc(protoFunc socket.ProtoFunc)
+var SetDefaultProtoFunc = socket.SetDefaultProtoFunc
 
 // GetReadLimit gets the packet size upper limit of reading.
 //  PacketSizeLimit() uint32
@@ -53,10 +52,6 @@ var GetReadLimit = socket.PacketSizeLimit
 // If maxSize<=0, set it to max uint32.
 //  func SetPacketSizeLimit(maxPacketSize uint32)
 var SetReadLimit = socket.SetPacketSizeLimit
-
-func init() {
-	Printf("The current process PID: %d", os.Getpid())
-}
 
 var (
 	_maxGoroutinesAmount      = (1024 * 1024 * 8) / 8 // max memory 8GB (8KB/goroutine)
@@ -112,4 +107,8 @@ func newTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 		}
 	}
 	return tlsConfig, nil
+}
+
+func init() {
+	Printf("The current process PID: %d", os.Getpid())
 }

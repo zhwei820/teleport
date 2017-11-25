@@ -16,7 +16,7 @@ func main() {
 		TlsCertFile:         "",
 		TlsKeyFile:          "",
 		SlowCometDuration:   time.Millisecond * 500,
-		DefaultBodyType:     "json",
+		DefaultBodyCodec:    "json",
 		PrintBody:           true,
 		CountTime:           true,
 	}
@@ -57,9 +57,9 @@ func main() {
 		var pullcmd = sess.Pull(
 			"/group/home/test_unknown?peer_id=client9091",
 			struct {
-				ConnPort int
-				json.RawMessage
-				Bytes []byte
+				ConnPort   int
+				RawMessage json.RawMessage
+				Bytes      []byte
 			}{
 				9091,
 				json.RawMessage(`{"RawMessage":"test9091"}`),

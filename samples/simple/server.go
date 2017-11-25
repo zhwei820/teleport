@@ -17,7 +17,7 @@ func main() {
 		TlsCertFile:         "",
 		TlsKeyFile:          "",
 		SlowCometDuration:   time.Millisecond * 500,
-		DefaultBodyType:     "json",
+		DefaultBodyCodec:    "json",
 		PrintBody:           true,
 		CountTime:           true,
 		ListenAddrs: []string{
@@ -54,9 +54,9 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, *tp.R
 func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, *tp.Rerror) {
 	time.Sleep(1)
 	var v = struct {
-		ConnPort int
-		json.RawMessage
-		Bytes []byte
+		ConnPort   int
+		RawMessage json.RawMessage
+		Bytes      []byte
 	}{}
 	codecId, err := ctx.Bind(&v)
 	if err != nil {

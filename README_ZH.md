@@ -88,7 +88,7 @@ type (
         // header object
         Header *Header `json:"header"`
         // body codec type
-        BodyType byte `json:"body_type"`
+        BodyCodec byte `json:"body_codec"`
         // body object
         Body interface{} `json:"body"`
         // NewBody creates a new body by header info
@@ -173,7 +173,7 @@ var cfg = &tp.PeerConfig{
     TlsCertFile:         "",
     TlsKeyFile:          "",
     SlowCometDuration:   time.Millisecond * 500,
-    DefaultBodyType:     "json",
+    DefaultBodyCodec:     "json",
     PrintBody:           true,
     CountTime:           true,
     ListenAddrs: []string{
@@ -330,7 +330,7 @@ func main() {
         TlsCertFile:         "",
         TlsKeyFile:          "",
         SlowCometDuration:   time.Millisecond * 500,
-        DefaultBodyType:     "json",
+        DefaultBodyCodec:    "json",
         PrintBody:           true,
         CountTime:           true,
         ListenAddrs: []string{
@@ -367,15 +367,15 @@ func (h *Home) Test(args *map[string]interface{}) (map[string]interface{}, *tp.R
 func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, *tp.Rerror) {
     time.Sleep(1)
     var v = struct {
-        ConnPort int
-        json.RawMessage
-        Bytes []byte
+        ConnPort   int
+        RawMessage json.RawMessage
+        Bytes      []byte
     }{}
     codecId, err := ctx.Bind(&v)
     if err != nil {
         return nil, tp.NewRerror(1001, "bind error", err.Error())
     }
-    tp.Debugf("UnknownPullHandle: codec: %s, conn_port: %d, RawMessage: %s, bytes: %s",
+    tp.Debugf("UnknownPullHandle: codec: %d, conn_port: %d, RawMessage: %s, bytes: %s",
         codecId, v.ConnPort, v.RawMessage, v.Bytes,
     )
     return []string{"a", "aa", "aaa"}, nil
@@ -403,7 +403,7 @@ func main() {
         TlsCertFile:         "",
         TlsKeyFile:          "",
         SlowCometDuration:   time.Millisecond * 500,
-        DefaultBodyType:     "json",
+        DefaultBodyCodec:    "json",
         PrintBody:           true,
         CountTime:           true,
     }
@@ -444,9 +444,9 @@ func main() {
         var pullcmd = sess.Pull(
             "/group/home/test_unknown?peer_id=client9091",
             struct {
-                ConnPort int
-                json.RawMessage
-                Bytes []byte
+                ConnPort   int
+                RawMessage json.RawMessage
+                Bytes      []byte
             }{
                 9091,
                 json.RawMessage(`{"RawMessage":"test9091"}`),

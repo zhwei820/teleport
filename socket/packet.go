@@ -17,8 +17,10 @@
 package socket
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 
@@ -28,6 +30,38 @@ import (
 	"github.com/henrylee2cn/teleport/xfer"
 )
 
+type (
+	// Packet a socket data packet.
+	Packet struct {
+		// packet sequence
+		seq uint64
+		// packet type, such as PULL, PUSH, REPLY
+		ptype byte
+		// URL string
+		uri string
+		// metadata
+		meta *utils.Args
+		// body codec type
+		bodyCodec byte
+		// body object
+		body interface{}
+		// newBodyFunc creates a new body by packet type and URI.
+		// Note:
+		//  only for writing packet;
+		//  should be nil when reading packet.
+		newBodyFunc NewBodyFunc
+		// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+		// Note: the length can not be bigger than 255!
+		xferPipe *xfer.XferPipe
+		// packet size
+		size uint32
+		next *Packet
+	}
+
+	// NewBodyFunc creates a new body by header info.
+	NewBodyFunc func(seq uint64, ptype byte, uri string) interface{}
+)
+
 var packetStack = new(struct {
 	freePacket *Packet
 	mu         sync.Mutex
@@ -35,39 +69,25 @@ var packetStack = new(struct {
 
 // GetPacket gets a *Packet form packet stack.
 // Note:
-//  NewBody is only for reading form connection;
+//  newBodyFunc is only for reading form connection;
 //  settings are only for writing to connection.
-func GetPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
+func GetPacket(settings ...PacketSetting) *Packet {
 	packetStack.mu.Lock()
 	p := packetStack.freePacket
 	if p == nil {
-		p = NewPacket(NewBody)
+		p = NewPacket(settings...)
 	} else {
 		packetStack.freePacket = p.next
-		p.Reset(NewBody, settings...)
+		p.doSetting(settings...)
 	}
 	packetStack.mu.Unlock()
 	return p
 }
 
-// GetSenderPacket returns a packet for sending.
-func GetSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
-	packet := GetPacket(nil, setting...)
-	packet.Header.Type = packetType
-	packet.Header.Uri = uri
-	packet.Body = body
-	return packet
-}
-
-// GetReceiverPacket returns a packet for sending.
-func GetReceiverPacket(NewBody NewBodyFunc) *Packet {
-	return GetPacket(NewBody)
-}
-
 // PutPacket puts a *Packet to packet stack.
 func PutPacket(p *Packet) {
 	packetStack.mu.Lock()
-	p.Body = nil
+	p.Reset()
 	p.next = packetStack.freePacket
 	packetStack.freePacket = p
 	packetStack.mu.Unlock()
@@ -77,111 +97,145 @@ func PutPacket(p *Packet) {
 // Note:
 //  NewBody is only for reading form connection;
 //  settings are only for writing to connection.
-func NewPacket(NewBody NewBodyFunc, settings ...PacketSetting) *Packet {
+func NewPacket(settings ...PacketSetting) *Packet {
 	var p = &Packet{
-		Header:  new(Header),
-		NewBody: NewBody,
+		meta:     new(utils.Args),
+		xferPipe: new(xfer.XferPipe),
 	}
-	for _, f := range settings {
-		f(p)
-	}
+	p.doSetting(settings...)
 	return p
 }
 
-// NewSenderPacket returns a packet for sending.
-func NewSenderPacket(packetType byte, uri string, body interface{}, setting ...PacketSetting) *Packet {
-	packet := NewPacket(nil, setting...)
-	packet.Header.Type = packetType
-	packet.Header.Uri = uri
-	packet.Body = body
-	return packet
+// Reset resets itself.
+// Note:
+//  newBodyFunc is only for reading form connection;
+//  settings are only for writing to connection.
+func (p *Packet) Reset(settings ...PacketSetting) {
+	p.next = nil
+	p.body = nil
+	p.meta.Reset()
+	p.xferPipe.Reset()
+	p.newBodyFunc = nil
+	p.seq = 0
+	p.ptype = 0
+	p.uri = ""
+	p.size = 0
+	p.bodyCodec = codec.NilCodecId
+	p.doSetting(settings...)
 }
 
-// NewReceiverPacket returns a packet for sending.
-func NewReceiverPacket(NewBody NewBodyFunc) *Packet {
-	return NewPacket(NewBody)
-}
-
-type (
-	// Packet a socket data packet.
-	Packet struct {
-		// packet size
-		Size uint32 `json:"size"`
-		// header object
-		Header *Header `json:"header"`
-		// body codec type
-		BodyType byte `json:"body_type"`
-		// body object
-		Body interface{} `json:"body"`
-		// NewBody creates a new body by header info
-		// Note:
-		//  only for writing packet;
-		//  should be nil when reading packet.
-		NewBody NewBodyFunc `json:"-"`
-		// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
-		// Note: the length can not be bigger than 255!
-		XferPipe xfer.XferPipe `json:"-"`
-		next     *Packet
+func (p *Packet) doSetting(settings ...PacketSetting) {
+	for _, fn := range settings {
+		if fn != nil {
+			fn(p)
+		}
 	}
-
-	// Header header content of socket data packet.
-	Header struct {
-		Seq  uint64     `json:"seq"`
-		Type byte       `json:"type"`
-		Uri  string     `json:"uri"`
-		Meta utils.Args `json:"-"`
-	}
-
-	// NewBodyFunc creates a new body by header info.
-	NewBodyFunc func(*Header) interface{}
-)
-
-// SetSizeAndCheck sets the size of packet.
-// If the size is too big, returns error.
-func (p *Packet) SetSizeAndCheck(size uint32) error {
-	err := checkPacketSize(size)
-	if err != nil {
-		return err
-	}
-	p.Size = size
-	return nil
 }
 
-// GetSize returns the size of packet.
-func (p *Packet) GetSize() uint32 {
-	return p.Size
+// Ptype returns the packet sequence
+func (p *Packet) Seq() uint64 {
+	return p.seq
 }
+
+// SetSeq sets the packet sequence
+func (p *Packet) SetSeq(seq uint64) {
+	p.seq = seq
+}
+
+// Ptype returns the packet type, such as PULL, PUSH, REPLY
+func (p *Packet) Ptype() byte {
+	return p.ptype
+}
+
+// Ptype sets the packet type
+func (p *Packet) SetPtype(ptype byte) {
+	p.ptype = ptype
+}
+
+// Uri returns the URL string string
+func (p *Packet) Uri() string {
+	return p.uri
+}
+
+// SetUri sets the packet URL string
+func (p *Packet) SetUri(uri string) {
+	p.uri = uri
+}
+
+// Meta returns the metadata
+func (p *Packet) Meta() *utils.Args {
+	return p.meta
+}
+
+// SetMeta sets the metadata
+func (p *Packet) SetMeta(meta *utils.Args) {
+	p.meta = meta
+}
+
+// BodyCodec returns the body codec type id
+func (p *Packet) BodyCodec() byte {
+	return p.bodyCodec
+}
+
+// SetBodyCodec sets the body codec type id
+func (p *Packet) SetBodyCodec(bodyCodec byte) {
+	p.bodyCodec = bodyCodec
+}
+
+// Body returns the body object
+func (p *Packet) Body() interface{} {
+	return p.body
+}
+
+// SetBody sets the body object
+func (p *Packet) SetBody(body interface{}) {
+	p.body = body
+}
+
+// SetNewBody resets the function of geting body.
+func (p *Packet) SetNewBody(newBodyFunc NewBodyFunc) {
+	p.newBodyFunc = newBodyFunc
+}
+
+// // NewBody creates a new body by packet type and URI.
+// // Note:
+// //  only for writing packet;
+// //  should be nil when reading packet.
+// func (p *Packet) NewBody(seq uint64, ptype byte, uri string) interface{} {
+// 	return p.newBodyFunc(seq, ptype, uri)
+// }
 
 // MarshalBody returns the encoding of body.
 func (p *Packet) MarshalBody() ([]byte, error) {
-	if p.Body == nil {
+	if p.body == nil {
 		return []byte{}, nil
 	}
-	c, err := codec.Get(p.BodyType)
+	c, err := codec.Get(p.bodyCodec)
 	if err != nil {
 		return []byte{}, err
 	}
-	return c.Marshal(p.Body)
+	return c.Marshal(p.body)
 }
 
-// UnmarshalBody parses the encoded data and stores the result
-// in the value pointed to by v.
-func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
+// UnmarshalNewBody unmarshal the encoded data to a new body.
+func (p *Packet) UnmarshalNewBody(bodyBytes []byte) error {
 	if len(bodyBytes) == 0 {
 		return nil
 	}
-	if p.NewBody == nil {
-		p.Body = nil
+	if p.newBodyFunc == nil {
+		p.body = nil
 		return nil
 	}
-	c, err := codec.Get(p.BodyType)
+	c, err := codec.Get(p.bodyCodec)
 	if err != nil {
 		return err
 	}
-	p.Body = p.NewBody(p.Header)
-	switch body := p.Body.(type) {
+	p.body = p.newBodyFunc(p.seq, p.ptype, p.uri)
+	switch body := p.body.(type) {
 	default:
-		return c.Unmarshal(bodyBytes, p.Body)
+		return c.Unmarshal(bodyBytes, p.body)
+	case nil:
+		return nil
 	case *[]byte:
 		if body != nil {
 			*body = bodyBytes
@@ -190,74 +244,166 @@ func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
 	}
 }
 
-// Reset resets itself.
-// Note:
-//  NewBody is only for reading form connection;
-//  settings are only for writing to connection.
-func (p *Packet) Reset(newBodyFunc NewBodyFunc, settings ...PacketSetting) {
-	p.next = nil
-	p.NewBody = newBodyFunc
-	*p.Header = Header{}
-	p.Body = nil
-	p.Size = 0
-	p.BodyType = codec.NilCodecId
-	p.XferPipe.Reset()
-	for _, f := range settings {
-		f(p)
+// UnmarshalNewBody unmarshal the encoded data to the existed body.
+func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
+	if len(bodyBytes) == 0 {
+		return nil
+	}
+	c, err := codec.Get(p.bodyCodec)
+	if err != nil {
+		return err
+	}
+	switch body := p.body.(type) {
+	default:
+		return c.Unmarshal(bodyBytes, p.body)
+	case nil:
+		return nil
+	case *[]byte:
+		if body != nil {
+			*body = bodyBytes
+		}
+		return nil
 	}
 }
 
-// SetNewBody resets the function of geting body.
-func (p *Packet) SetNewBody(newBodyFunc NewBodyFunc) {
-	p.NewBody = newBodyFunc
+// XferPipe returns transfer filter pipe, handlers from outer-most to inner-most.
+// Note: the length can not be bigger than 255!
+func (p *Packet) XferPipe() *xfer.XferPipe {
+	return p.xferPipe
 }
+
+// Size returns the size of packet.
+func (p *Packet) Size() uint32 {
+	return p.size
+}
+
+// SetSizeAndCheck sets the size of packet.
+// If the size is too big, returns error.
+func (p *Packet) SetSize(size uint32) error {
+	err := checkPacketSize(size)
+	if err != nil {
+		return err
+	}
+	p.size = size
+	return nil
+}
+
+const packetFormat = `
+{
+  "seq": %d,
+  "ptype": %d,
+  "uri": %q,
+  "meta": %q,
+  "body_codec": %d,
+  "body": %s,
+  "xfer_pipe": %s,
+  "size": %d
+}`
 
 // String returns printing text.
 func (p *Packet) String() string {
-	b, _ := json.MarshalIndent(p, "", "  ")
-	return goutil.BytesToString(b)
+	var xferPipeIds = make([]int, p.xferPipe.Len())
+	for i, id := range p.xferPipe.Ids() {
+		xferPipeIds[i] = int(id)
+	}
+	idsBytes, _ := json.Marshal(xferPipeIds)
+	b, _ := json.Marshal(p.body)
+	dst := bytes.NewBuffer(make([]byte, 0, len(b)*2))
+	json.Indent(dst, goutil.StringToBytes(
+		fmt.Sprintf(packetFormat,
+			p.seq,
+			p.ptype,
+			p.uri,
+			p.meta.QueryString(),
+			p.bodyCodec,
+			b,
+			idsBytes,
+			p.size,
+		),
+	), "", "  ")
+	return goutil.BytesToString(dst.Bytes())
 }
 
 // PacketSetting sets Header field.
 type PacketSetting func(*Packet)
 
-// WithBodyType sets body codec name.
-func WithBodyType(codecId byte) PacketSetting {
+// WithSeq sets the packet sequence
+func WithSeq(seq uint64) PacketSetting {
 	return func(p *Packet) {
-		p.BodyType = codecId
+		p.seq = seq
+	}
+}
+
+// Ptype sets the packet type
+func WithPtype(ptype byte) PacketSetting {
+	return func(p *Packet) {
+		p.ptype = ptype
+	}
+}
+
+// WithUri sets the packet URL string
+func WithUri(uri string) PacketSetting {
+	return func(p *Packet) {
+		p.uri = uri
+	}
+}
+
+// WithMeta sets the metadata
+func WithMeta(meta *utils.Args) PacketSetting {
+	return func(p *Packet) {
+		p.meta = meta
+	}
+}
+func WithBodyCodec(bodyCodec byte) PacketSetting {
+	return func(p *Packet) {
+		p.bodyCodec = bodyCodec
+	}
+}
+
+// WithBody sets the body object
+func WithBody(body interface{}) PacketSetting {
+	return func(p *Packet) {
+		p.body = body
+	}
+}
+
+// WithNewBody resets the function of geting body.
+func WithNewBody(newBodyFunc NewBodyFunc) PacketSetting {
+	return func(p *Packet) {
+		p.newBodyFunc = newBodyFunc
 	}
 }
 
 // WithXferPipe sets transfer filter pipe.
 func WithXferPipe(filterId ...byte) PacketSetting {
 	return func(p *Packet) {
-		p.XferPipe.Append(filterId...)
+		p.xferPipe.Append(filterId...)
 	}
 }
 
 var (
-	defaultBodyType codec.Codec
+	defaultBodyCodec codec.Codec
 )
 
 func init() {
-	SetDefaultBodyType(codec.ID_JSON)
+	SetDefaultBodyCodec(codec.ID_JSON)
 }
 
-// GetDefaultBodyType gets the body default codec.
-func GetDefaultBodyType() codec.Codec {
-	return defaultBodyType
+// GetDefaultBodyCodec gets the body default codec.
+func GetDefaultBodyCodec() codec.Codec {
+	return defaultBodyCodec
 }
 
-// SetDefaultBodyType set the default header codec.
+// SetDefaultBodyCodec set the default header codec.
 // Note:
 //  If the codec.Codec named 'codecId' is not registered, it will panic;
 //  It is not safe to call it concurrently.
-func SetDefaultBodyType(codecId byte) {
+func SetDefaultBodyCodec(codecId byte) {
 	c, err := codec.Get(codecId)
 	if err != nil {
 		panic(err)
 	}
-	defaultBodyType = c
+	defaultBodyCodec = c
 }
 
 var (

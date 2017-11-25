@@ -99,8 +99,8 @@ func (f *FastProto) Pack(p *Packet) error {
 	bb.WriteByte(f.id)
 
 	// transfer pipe
-	bb.WriteByte(byte(p.XferPipe.Len()))
-	bb.Write(p.XferPipe.Ids())
+	bb.WriteByte(byte(p.XferPipe().Len()))
+	bb.Write(p.XferPipe().Ids())
 
 	prefixLen := bb.Len()
 
@@ -117,20 +117,20 @@ func (f *FastProto) Pack(p *Packet) error {
 	}
 
 	// do transfer pipe
-	payload, err := p.XferPipe.OnPack(bb.B[prefixLen:])
+	payload, err := p.XferPipe().OnPack(bb.B[prefixLen:])
 	if err != nil {
 		return err
 	}
 	bb.B = append(bb.B[:prefixLen], payload...)
 
 	// set and check packet size
-	err = p.SetSizeAndCheck(uint32(bb.Len()))
+	err = p.SetSize(uint32(bb.Len()))
 	if err != nil {
 		return err
 	}
 
 	// reset real size
-	binary.BigEndian.PutUint32(bb.B, p.GetSize())
+	binary.BigEndian.PutUint32(bb.B, p.Size())
 
 	// real write
 	_, err = f.w.Write(bb.B)
@@ -142,22 +142,22 @@ func (f *FastProto) Pack(p *Packet) error {
 }
 
 func (f *FastProto) writeHeader(bb *utils.ByteBuffer, p *Packet) error {
-	binary.Write(bb, binary.BigEndian, p.Header.Seq)
+	binary.Write(bb, binary.BigEndian, p.Seq())
 
-	bb.WriteByte(p.Header.Type)
+	bb.WriteByte(p.Ptype())
 
-	uriBytes := goutil.StringToBytes(p.Header.Uri)
+	uriBytes := goutil.StringToBytes(p.Uri())
 	binary.Write(bb, binary.BigEndian, uint32(len(uriBytes)))
 	bb.Write(uriBytes)
 
-	metaBytes := p.Header.Meta.QueryString()
+	metaBytes := p.Meta().QueryString()
 	binary.Write(bb, binary.BigEndian, uint32(len(metaBytes)))
 	bb.Write(metaBytes)
 	return nil
 }
 
 func (f *FastProto) writeBody(bb *utils.ByteBuffer, p *Packet) error {
-	bb.WriteByte(p.BodyType)
+	bb.WriteByte(p.BodyCodec())
 	bodyBytes, err := p.MarshalBody()
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (f *FastProto) Unpack(p *Packet) error {
 		return err
 	}
 	// do transfer pipe
-	data, err := p.XferPipe.OnUnpack(bb.B)
+	data, err := p.XferPipe().OnUnpack(bb.B)
 	if err != nil {
 		return err
 	}
@@ -197,7 +197,7 @@ func (f *FastProto) readPacket(bb *utils.ByteBuffer, p *Packet) error {
 	if err != nil {
 		return err
 	}
-	if err = p.SetSizeAndCheck(size); err != nil {
+	if err = p.SetSize(size); err != nil {
 		return err
 	}
 	// protocol
@@ -220,7 +220,7 @@ func (f *FastProto) readPacket(bb *utils.ByteBuffer, p *Packet) error {
 		if err != nil {
 			return err
 		}
-		err = p.XferPipe.Append(bb.B[:xferLen]...)
+		err = p.XferPipe().Append(bb.B[:xferLen]...)
 		if err != nil {
 			return err
 		}
@@ -234,25 +234,25 @@ func (f *FastProto) readPacket(bb *utils.ByteBuffer, p *Packet) error {
 
 func (f *FastProto) readHeader(data []byte, p *Packet) []byte {
 	// seq
-	p.Header.Seq = binary.BigEndian.Uint64(data)
+	p.SetSeq(binary.BigEndian.Uint64(data))
 	data = data[8:]
 	// type
-	p.Header.Type = data[0]
+	p.SetPtype(data[0])
 	data = data[1:]
 	// uri
 	uriLen := binary.BigEndian.Uint32(data)
 	data = data[4:]
-	p.Header.Uri = string(data[:uriLen])
+	p.SetUri(string(data[:uriLen]))
 	data = data[uriLen:]
 	// meta
 	metaLen := binary.BigEndian.Uint32(data)
 	data = data[4:]
-	p.Header.Meta.ParseBytes(data[:metaLen])
+	p.Meta().ParseBytes(data[:metaLen])
 	data = data[metaLen:]
 	return data
 }
 
 func (f *FastProto) readBody(data []byte, p *Packet) error {
-	p.BodyType = data[0]
-	return p.UnmarshalBody(data[1:])
+	p.SetBodyCodec(data[0])
+	return p.UnmarshalNewBody(data[1:])
 }

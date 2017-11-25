@@ -159,35 +159,29 @@ func newSocket(c net.Conn, protoFuncs []ProtoFunc) *socket {
 // Note:
 //  For the byte stream type of body, write directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
-func (s *socket) WritePacket(packet *Packet) (err error) {
-	if packet.BodyType == codec.NilCodecId {
-		packet.BodyType = defaultBodyType.Id()
-	}
+func (s *socket) WritePacket(packet *Packet) error {
 	s.mu.RLock()
-	defer func() {
-		s.mu.RUnlock()
-		if p := recover(); p != nil {
-			err = errors.Errorf("Write bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
-		} else if err != nil && s.isActiveClosed() {
-			err = ErrProactivelyCloseSocket
-		}
-	}()
-	return s.protocol.Pack(packet)
+	protocol := s.protocol
+	s.mu.RUnlock()
+	if packet.BodyCodec() == codec.NilCodecId {
+		packet.SetBodyCodec(defaultBodyCodec.Id())
+	}
+	err := protocol.Pack(packet)
+	if err != nil && s.isActiveClosed() {
+		err = ErrProactivelyCloseSocket
+	}
+	return err
 }
 
 // ReadPacket reads header and body from the connection.
 // Note:
 //  For the byte stream type of body, read directly, do not do any processing;
 //  Must be safe for concurrent use by multiple goroutines.
-func (s *socket) ReadPacket(packet *Packet) (err error) {
+func (s *socket) ReadPacket(packet *Packet) error {
 	s.mu.RLock()
-	defer func() {
-		s.mu.RUnlock()
-		if p := recover(); p != nil {
-			err = errors.Errorf("Read bad packet: %v\nstack: %s", p, goutil.PanicTrace(1))
-		}
-	}()
-	return s.protocol.Unpack(packet)
+	protocol := s.protocol
+	s.mu.RUnlock()
+	return protocol.Unpack(packet)
 }
 
 // Public returns temporary public data of Socket.
@@ -246,55 +240,29 @@ func (s *socket) Close() error {
 	if s.isActiveClosed() {
 		return nil
 	}
-	atomic.StoreInt32(&s.curState, activeClose)
-
-	var errs []error
-	if s.Conn != nil {
-		errs = append(errs, s.Conn.Close())
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if s.isActiveClosed() {
 		return nil
 	}
+	atomic.StoreInt32(&s.curState, activeClose)
 
+	var err error
+	if s.Conn != nil {
+		err = s.Conn.Close()
+	}
 	if s.fromPool {
 		s.Conn = nil
 		s.ctxPublic = nil
 		s.protocol = nil
 		socketPool.Put(s)
 	}
-	return errors.Merge(errs...)
+	return err
 }
 
 func (s *socket) isActiveClosed() bool {
 	return atomic.LoadInt32(&s.curState) == activeClose
 }
-
-func getProto(protoFuncs []ProtoFunc, rw io.ReadWriter) Proto {
-	if len(protoFuncs) > 0 {
-		return protoFuncs[0](rw)
-	} else {
-		return defaultProtoFunc(rw)
-	}
-}
-
-type (
-	ifaceSetKeepAlive interface {
-		SetKeepAlive(keepalive bool) error
-		SetKeepAlivePeriod(d time.Duration) error
-	}
-	ifaceSetBuffer interface {
-		// SetReadBuffer sets the size of the operating system's
-		// receive buffer associated with the connection.
-		SetReadBuffer(bytes int) error
-		// SetWriteBuffer sets the size of the operating system's
-		// transmit buffer associated with the connection.
-		SetWriteBuffer(bytes int) error
-	}
-)
 
 func (s *socket) optimize() {
 	if c, ok := s.Conn.(ifaceSetKeepAlive); ok {
@@ -315,6 +283,21 @@ var (
 	tcpWriteBuffer = -1
 	// tcpReadBuffer  = 0
 	tcpReadBuffer = 1024 * 35
+)
+
+type (
+	ifaceSetKeepAlive interface {
+		SetKeepAlive(keepalive bool) error
+		SetKeepAlivePeriod(d time.Duration) error
+	}
+	ifaceSetBuffer interface {
+		// SetReadBuffer sets the size of the operating system's
+		// receive buffer associated with the connection.
+		SetReadBuffer(bytes int) error
+		// SetWriteBuffer sets the size of the operating system's
+		// transmit buffer associated with the connection.
+		SetWriteBuffer(bytes int) error
+	}
 )
 
 // SetReadBuffer sets the size of the operating system's
@@ -345,5 +328,13 @@ func resetFastProtoReadBufioSize() {
 		fastProtoReadBufioSize = 1024 * 35
 	} else {
 		fastProtoReadBufioSize = tcpReadBuffer / 2
+	}
+}
+
+func getProto(protoFuncs []ProtoFunc, rw io.ReadWriter) Proto {
+	if len(protoFuncs) > 0 {
+		return protoFuncs[0](rw)
+	} else {
+		return defaultProtoFunc(rw)
 	}
 }

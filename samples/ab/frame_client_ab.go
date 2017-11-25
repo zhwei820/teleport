@@ -19,7 +19,7 @@ func main() {
 	go tp.GraceSignal()
 	tp.SetShutdown(time.Second*20, nil, nil)
 	var cfg = &tp.PeerConfig{
-		DefaultBodyType: "protobuf",
+		DefaultBodyCodec: "protobuf",
 	}
 
 	var peer = tp.NewPeer(cfg)

@@ -8,7 +8,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/henrylee2cn/goutil"
-	"github.com/henrylee2cn/teleport/socket"
+	"github.com/henrylee2cn/teleport/utils"
 )
 
 type (
@@ -46,10 +46,10 @@ func NewRerror(code int32, message, detail string) *Rerror {
 	}
 }
 
-// NewRerrorFromMeta creates a *Rerror from header 'X-Reply-Error' metadata.
-// Return nil if there is no 'X-Reply-Error' in header metadata.
-func NewRerrorFromMeta(header *socket.Header) *Rerror {
-	b := header.Meta.Peek(MetaRerrorKey)
+// NewRerrorFromMeta creates a *Rerror from 'X-Reply-Error' metadata.
+// Return nil if there is no 'X-Reply-Error' in metadata.
+func NewRerrorFromMeta(meta *utils.Args) *Rerror {
+	b := meta.Peek(MetaRerrorKey)
 	if len(b) == 0 {
 		return nil
 	}
@@ -69,13 +69,13 @@ func (r Rerror) Copy() *Rerror {
 	return &r
 }
 
-// SetToMeta sets self to header 'X-Reply-Error' metadata.
-func (r *Rerror) SetToMeta(header *socket.Header) {
+// SetToMeta sets self to 'X-Reply-Error' metadata.
+func (r *Rerror) SetToMeta(meta *utils.Args) {
 	errStr := r.String()
 	if len(errStr) == 0 {
 		return
 	}
-	header.Meta.Set(MetaRerrorKey, errStr)
+	meta.Set(MetaRerrorKey, errStr)
 }
 
 // MarshalJSON marshals Rerror into JSON, implements json.Marshaler interface.
@@ -110,10 +110,10 @@ func (r *Rerror) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func hasRerror(header *socket.Header) bool {
-	return header.Meta.Has(MetaRerrorKey)
+func hasRerror(meta *utils.Args) bool {
+	return meta.Has(MetaRerrorKey)
 }
 
-func getRerrorBytes(header *socket.Header) []byte {
-	return header.Meta.Peek(MetaRerrorKey)
+func getRerrorBytes(meta *utils.Args) []byte {
+	return meta.Peek(MetaRerrorKey)
 }

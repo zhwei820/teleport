@@ -42,7 +42,7 @@ type Peer struct {
 	defaultWriteTimeout int32 // time.Duration // writedeadline for underlying net.Conn
 	tlsConfig           *tls.Config
 	slowCometDuration   time.Duration
-	defaultBodyType     byte
+	defaultBodyCodec    byte
 	printBody           bool
 	countTime           bool
 	timeNow             func() time.Time
@@ -81,10 +81,10 @@ func NewPeer(cfg *PeerConfig, plugin ...Plugin) *Peer {
 		printBody:           cfg.PrintBody,
 		countTime:           cfg.CountTime,
 	}
-	if c, err := codec.GetByName(cfg.DefaultBodyType); err != nil {
+	if c, err := codec.GetByName(cfg.DefaultBodyCodec); err != nil {
 		Fatalf("%v", err)
 	} else {
-		p.defaultBodyType = c.Id()
+		p.defaultBodyCodec = c.Id()
 	}
 	if p.countTime {
 		p.timeNow = time.Now
