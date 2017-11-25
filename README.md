@@ -78,41 +78,53 @@ Peer -> Connection -> Socket -> Session -> Context
 The contents of every one packet:
 
 ```go
-type Packet struct {
-	// HeaderCodec header codec string
-	HeaderCodec string
-	// BodyCodec body codec string
-	BodyCodec string
-	// header content
-	Header *Header `json:"header"`
-	// body content
-	Body interface{} `json:"body"`
-	// header length
-	HeaderLength int64 `json:"header_length"`
-	// body length
-	BodyLength int64 `json:"body_length"`
-	// packet size
-	Size int64 `json:"size"`
-}
-```
+// in socket package
+type (
+    // Packet a socket data packet.
+    Packet struct {
+        // packet sequence
+        seq uint64
+        // packet type, such as PULL, PUSH, REPLY
+        ptype byte
+        // URL string
+        uri string
+        // metadata
+        meta *utils.Args
+        // body codec type
+        bodyCodec byte
+        // body object
+        body interface{}
+        // newBodyFunc creates a new body by packet type and URI.
+        // Note:
+        //  only for writing packet;
+        //  should be nil when reading packet.
+        newBodyFunc NewBodyFunc
+        // XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+        // Note: the length can not be bigger than 255!
+        xferPipe *xfer.XferPipe
+        // packet size
+        size uint32
+        next *Packet
+    }
 
-Among the contents of the header:
+    // NewBodyFunc creates a new body by header info.
+    NewBodyFunc func(seq uint64, ptype byte, uri string) interface{}
+)
 
-```go
-type Header struct {
-	// Packet id
-	Id string
-	// Service type
-	Type int32
-	// Service URI
-	Uri string
-	// Body gzip level [-2,9]
-	Gzip int32
-	// As reply, it indicates the service status code
-	StatusCode int32
-	// As reply, it indicates the service status text
-	Status string
-}
+// in xfer package
+type (
+    // XferPipe transfer filter pipe, handlers from outer-most to inner-most.
+    // Note: the length can not be bigger than 255!
+    XferPipe struct {
+        filters []XferFilter
+    }
+    // XferFilter handles byte stream of packet when transfer.
+    XferFilter interface {
+        Id() byte
+        OnPack([]byte) ([]byte, error)
+        OnUnpack([]byte) ([]byte, error)
+    }
+)
 ```
 
 ### 4.4 Protocol

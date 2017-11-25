@@ -79,42 +79,40 @@ Peer -> Connection -> Socket -> Session -> Context
 
 每个数据包的内容如下:
 ```go
-// socket package
+// in socket package
 type (
     // Packet a socket data packet.
     Packet struct {
-        // packet size
-        Size uint32 `json:"size"`
-        // header object
-        Header *Header `json:"header"`
+        // packet sequence
+        seq uint64
+        // packet type, such as PULL, PUSH, REPLY
+        ptype byte
+        // URL string
+        uri string
+        // metadata
+        meta *utils.Args
         // body codec type
-        BodyCodec byte `json:"body_codec"`
+        bodyCodec byte
         // body object
-        Body interface{} `json:"body"`
-        // NewBody creates a new body by header info
+        body interface{}
+        // newBodyFunc creates a new body by packet type and URI.
         // Note:
         //  only for writing packet;
         //  should be nil when reading packet.
-        NewBody NewBodyFunc `json:"-"`
+        newBodyFunc NewBodyFunc
         // XferPipe transfer filter pipe, handlers from outer-most to inner-most.
         // Note: the length can not be bigger than 255!
-        XferPipe xfer.XferPipe `json:"-"`
-        next     *Packet
-    }
-
-    // Header header content of socket data packet.
-    Header struct {
-        Seq  uint64     `json:"seq"`
-        Type byte       `json:"type"`
-        Uri  string     `json:"uri"`
-        Meta utils.Args `json:"-"`
+        xferPipe *xfer.XferPipe
+        // packet size
+        size uint32
+        next *Packet
     }
 
     // NewBodyFunc creates a new body by header info.
-    NewBodyFunc func(*Header) interface{}
+    NewBodyFunc func(seq uint64, ptype byte, uri string) interface{}
 )
 
-// xfer package
+// in xfer package
 type (
     // XferPipe transfer filter pipe, handlers from outer-most to inner-most.
     // Note: the length can not be bigger than 255!

@@ -50,6 +50,7 @@ darwin amd64 4CPU 8GB
 The contents of every one packet:
 
 ```go
+// in socket package
 type (
 	// Packet a socket data packet.
 	Packet struct {
@@ -82,7 +83,7 @@ type (
 	NewBodyFunc func(seq uint64, ptype byte, uri string) interface{}
 )
 
-// xfer package
+// in xfer package
 type (
 	// XferPipe transfer filter pipe, handlers from outer-most to inner-most.
 	// Note: the length can not be bigger than 255!
