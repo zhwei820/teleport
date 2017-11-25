@@ -62,7 +62,7 @@ func UnknownPullHandle(ctx tp.UnknownPullCtx) (interface{}, *tp.Rerror) {
 	if err != nil {
 		return nil, tp.NewRerror(1001, "bind error", err.Error())
 	}
-	tp.Debugf("UnknownPullHandle: codec: %s, conn_port: %d, RawMessage: %s, bytes: %s",
+	tp.Debugf("UnknownPullHandle: codec: %d, conn_port: %d, RawMessage: %s, bytes: %s",
 		codecId, v.ConnPort, v.RawMessage, v.Bytes,
 	)
 	return []string{"a", "aa", "aaa"}, nil

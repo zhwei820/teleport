@@ -18,6 +18,7 @@ import (
 	"path"
 	"reflect"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/henrylee2cn/goutil"
@@ -34,7 +35,7 @@ type (
 		pathPrefix      string
 		pluginContainer PluginContainer
 		typ             string
-		fn              HandlersMaker
+		maker           HandlersMaker
 	}
 	// Handler pull or push handler type info
 	Handler struct {
@@ -62,7 +63,7 @@ func (r *Router) Group(pathPrefix string, plugin ...Plugin) *Router {
 		unknownApiType:  r.unknownApiType,
 		pathPrefix:      path.Join(r.pathPrefix, pathPrefix),
 		pluginContainer: pluginContainer,
-		fn:              r.fn,
+		maker:           r.maker,
 	}
 }
 
@@ -73,7 +74,7 @@ func (r *Router) Reg(ctrlStruct interface{}, plugin ...Plugin) {
 		Fatalf("%v", err)
 	}
 	warnInvaildRouterHooks(plugin)
-	handlers, err := r.fn(
+	handlers, err := r.maker(
 		r.pathPrefix,
 		ctrlStruct,
 		pluginContainer,
@@ -166,7 +167,7 @@ func newPullRouter(pluginContainer PluginContainer) *Router {
 		unknownApiType:  new(*Handler),
 		pathPrefix:      "/",
 		pluginContainer: pluginContainer,
-		fn:              pullHandlersMaker,
+		maker:           pullHandlersMaker,
 		typ:             "pull",
 	}
 }
@@ -200,6 +201,22 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 
 	if pluginContainer == nil {
 		pluginContainer = newPluginContainer()
+	}
+
+	type PullCtrlValue struct {
+		ctrl   reflect.Value
+		ctxPtr *PullCtx
+	}
+	var pool = &sync.Pool{
+		New: func() interface{} {
+			ctrl := reflect.New(ctypeElem)
+			pullCtxPtr := ctrl.Pointer() + pullCtxOffset
+			ctxPtr := (*PullCtx)(unsafe.Pointer(pullCtxPtr))
+			return &PullCtrlValue{
+				ctrl:   ctrl,
+				ctxPtr: ctxPtr,
+			}
+		},
 	}
 
 	for m := 0; m < ctype.NumMethod(); m++ {
@@ -244,10 +261,9 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 
 		var methodFunc = method.Func
 		var handleFunc = func(ctx *readHandleCtx, argValue reflect.Value) {
-			ctrl := reflect.New(ctypeElem)
-			pullCtxPtr := ctrl.Pointer() + pullCtxOffset
-			*((*PullCtx)(unsafe.Pointer(pullCtxPtr))) = ctx
-			rets := methodFunc.Call([]reflect.Value{ctrl, argValue})
+			obj := pool.Get().(*PullCtrlValue)
+			*obj.ctxPtr = ctx
+			rets := methodFunc.Call([]reflect.Value{obj.ctrl, argValue})
 			ctx.output.Body = rets[0].Interface()
 			rerr, _ := rets[1].Interface().(*Rerror)
 			if rerr != nil {
@@ -256,6 +272,7 @@ func pullHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 			} else if ctx.output.Body != nil && ctx.output.BodyType == codec.NilCodecId {
 				ctx.output.BodyType = ctx.input.BodyType
 			}
+			pool.Put(obj)
 		}
 
 		handlers = append(handlers, &Handler{
@@ -277,7 +294,7 @@ func newPushRouter(pluginContainer PluginContainer) *Router {
 		unknownApiType:  new(*Handler),
 		pathPrefix:      "/",
 		pluginContainer: pluginContainer,
-		fn:              pushHandlersMaker,
+		maker:           pushHandlersMaker,
 		typ:             "push",
 	}
 }
@@ -312,6 +329,21 @@ func pushHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 	if pluginContainer == nil {
 		pluginContainer = newPluginContainer()
 	}
+	type PushCtrlValue struct {
+		ctrl   reflect.Value
+		ctxPtr *PushCtx
+	}
+	var pool = &sync.Pool{
+		New: func() interface{} {
+			ctrl := reflect.New(ctypeElem)
+			pushCtxPtr := ctrl.Pointer() + pushCtxOffset
+			ctxPtr := (*PushCtx)(unsafe.Pointer(pushCtxPtr))
+			return &PushCtrlValue{
+				ctrl:   ctrl,
+				ctxPtr: ctxPtr,
+			}
+		},
+	}
 
 	for m := 0; m < ctype.NumMethod(); m++ {
 		method := ctype.Method(m)
@@ -345,13 +377,11 @@ func pushHandlersMaker(pathPrefix string, ctrlStruct interface{}, pluginContaine
 
 		var methodFunc = method.Func
 		var handleFunc = func(ctx *readHandleCtx, argValue reflect.Value) {
-			ctrl := reflect.New(ctypeElem)
-			pushCtxPtr := ctrl.Pointer() + pushCtxOffset
-			*((*PushCtx)(unsafe.Pointer(pushCtxPtr))) = ctx
-			// ctrl.Elem().FieldByName("PushCtx").Set(reflect.ValueOf(ctx))
-			methodFunc.Call([]reflect.Value{ctrl, argValue})
+			obj := pool.Get().(*PushCtrlValue)
+			*obj.ctxPtr = ctx
+			methodFunc.Call([]reflect.Value{obj.ctrl, argValue})
+			pool.Put(obj)
 		}
-
 		handlers = append(handlers, &Handler{
 			name:            path.Join(pathPrefix, ctrlStructSnakeName(ctype), goutil.SnakeString(mname)),
 			handleFunc:      handleFunc,
