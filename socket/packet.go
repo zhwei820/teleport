@@ -57,9 +57,54 @@ type (
 		size uint32
 		next *Packet
 	}
+	// packet header interface
+	Header interface {
+		// Ptype returns the packet sequence
+		Seq() uint64
+		// SetSeq sets the packet sequence
+		SetSeq(uint64)
+		// Ptype returns the packet type, such as PULL, PUSH, REPLY
+		Ptype() byte
+		// Ptype sets the packet type
+		SetPtype(byte)
+		// Uri returns the URL string string
+		Uri() string
+		// SetUri sets the packet URL string
+		SetUri(string)
+		// Meta returns the metadata
+		Meta() *utils.Args
+		// SetMeta sets the metadata
+		SetMeta(*utils.Args)
+	}
+	// packet body interface
+	Body interface {
+		// BodyCodec returns the body codec type id
+		BodyCodec() byte
+		// SetBodyCodec sets the body codec type id
+		SetBodyCodec(bodyCodec byte)
+		// Body returns the body object
+		Body() interface{}
+		// SetBody sets the body object
+		SetBody(body interface{})
+		// SetNewBody resets the function of geting body.
+		SetNewBody(newBodyFunc NewBodyFunc)
+		// NewBody creates a new body by packet type and URI.
+		// Note:
+		//  only for writing packet;
+		//  should be nil when reading packet.
+		// NewBody(seq uint64, ptype byte, uri string) interface{}
 
-	// NewBodyFunc creates a new body by header info.
-	NewBodyFunc func(seq uint64, ptype byte, uri string) interface{}
+		// MarshalBody returns the encoding of body.
+		MarshalBody() ([]byte, error)
+		// UnmarshalNewBody unmarshal the encoded data to a new body.
+		// Note: seq, ptype, uri must be setted already.
+		UnmarshalNewBody(bodyBytes []byte) error
+		// UnmarshalBody unmarshal the encoded data to the existed body.
+		UnmarshalBody(bodyBytes []byte)
+	}
+
+	// NewBodyFunc creates a new body by header.
+	NewBodyFunc func(Header) interface{}
 )
 
 var packetStack = new(struct {
@@ -218,6 +263,7 @@ func (p *Packet) MarshalBody() ([]byte, error) {
 }
 
 // UnmarshalNewBody unmarshal the encoded data to a new body.
+// Note: seq, ptype, uri must be setted already.
 func (p *Packet) UnmarshalNewBody(bodyBytes []byte) error {
 	if len(bodyBytes) == 0 {
 		return nil
@@ -230,7 +276,7 @@ func (p *Packet) UnmarshalNewBody(bodyBytes []byte) error {
 	if err != nil {
 		return err
 	}
-	p.body = p.newBodyFunc(p.seq, p.ptype, p.uri)
+	p.body = p.newBodyFunc(p)
 	switch body := p.body.(type) {
 	default:
 		return c.Unmarshal(bodyBytes, p.body)
@@ -244,7 +290,7 @@ func (p *Packet) UnmarshalNewBody(bodyBytes []byte) error {
 	}
 }
 
-// UnmarshalNewBody unmarshal the encoded data to the existed body.
+// UnmarshalBody unmarshal the encoded data to the existed body.
 func (p *Packet) UnmarshalBody(bodyBytes []byte) error {
 	if len(bodyBytes) == 0 {
 		return nil

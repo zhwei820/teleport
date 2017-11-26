@@ -235,18 +235,18 @@ func (c *readHandleCtx) Ip() string {
 }
 
 // Be executed synchronously when reading packet
-func (c *readHandleCtx) binding(seq uint64, ptype byte, uri string) (body interface{}) {
+func (c *readHandleCtx) binding(header socket.Header) (body interface{}) {
 	c.start = c.Peer().timeNow()
 	c.pluginContainer = c.sess.peer.pluginContainer
-	switch ptype {
+	switch header.Ptype() {
 	case TypeReply:
-		return c.bindReply(seq, uri)
+		return c.bindReply(header.Seq(), header.Uri())
 
 	case TypePush:
-		return c.bindPush(uri)
+		return c.bindPush(header.Uri())
 
 	case TypePull:
-		return c.bindPull(seq, uri)
+		return c.bindPull(header.Seq(), header.Uri())
 
 	default:
 		return nil
