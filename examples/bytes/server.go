@@ -3,7 +3,9 @@ package main
 import (
 	"time"
 
-	tp "github.com/henrylee2cn/teleport"
+	"github.com/henrylee2cn/teleport"
+	"github.com/davecgh/go-spew/spew"
+	"fmt"
 )
 
 func main() {
@@ -11,13 +13,28 @@ func main() {
 	tp.SetShutdown(time.Second*20, nil, nil)
 	var peer = tp.NewPeer(tp.PeerConfig{
 		SlowCometDuration: time.Millisecond * 500,
-		PrintBody:         true,
 		ListenAddress:     "0.0.0.0:9090",
 	})
 	group := peer.SubRoute("group")
 	group.RoutePull(new(Home))
 	peer.SetUnknownPull(UnknownPullHandle)
+
+	go func() {
+		for {
+
+			select {
+			case <-time.After(1 * time.Second):
+				fmt.Println()
+				spew.Print(peer.CountSession())
+				fmt.Println()
+
+			}
+		}
+	}()
+
 	peer.ListenAndServe()
+
+
 }
 
 // Home controller
